@@ -633,7 +633,7 @@ class ModelTestAPIView(View):
             
             # 添加脚本和参数
             command_parts.extend([
-                'scripts/model_test.py',
+                str(settings.EOLO_MODEL_TEST_SCRIPT),
                 absolute_model_path,
                 '--device',
                 settings.MODEL_TEST_CONFIG.get('DEFAULT_DEVICE', 'cpu')

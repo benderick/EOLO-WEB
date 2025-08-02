@@ -129,9 +129,6 @@ LOGIN_URL = '/accounts/login/'
 LOGIN_REDIRECT_URL = '/experiments/'
 LOGOUT_REDIRECT_URL = '/accounts/login/'
 
-# 数据集配置
-DATASETS_DIR = BASE_DIR / 'EOLO' / 'configs' / 'data'
-
 # GPU和实验管理配置
 GPU_CONFIG = {
     # GPU显存使用率阈值（百分比）
@@ -204,17 +201,19 @@ EOLO_DIR = BASE_DIR / 'EOLO'
 EOLO_CONFIGS_DIR = EOLO_DIR / 'configs'
 EOLO_MODEL_CONFIGS_DIR = EOLO_CONFIGS_DIR / 'model'
 EOLO_SETTING_CONFIGS_DIR = EOLO_CONFIGS_DIR / 'setting'
+EOLO_DATASETS_CONFIGS_DIR = EOLO_CONFIGS_DIR / 'data'
 
-# EOLO脚本路径
-EOLO_SCRIPTS_DIR = EOLO_DIR / 'scripts'
-EOLO_MODEL_TEST_SCRIPT = EOLO_SCRIPTS_DIR / 'model_test.py'
+# EOLO API 路径
+EOLO_API_DIR = EOLO_DIR / 'api'
+EOLO_MODEL_TEST_SCRIPT = EOLO_API_DIR / 'model_test.py'
+EOLO_PATHS_JSON = EOLO_API_DIR / 'paths.json'
 
 # 模型测试配置
 MODEL_TEST_CONFIG = {
     # 测试命令超时时间（秒）
     'TIMEOUT': 60,
     # 默认设备
-    'DEFAULT_DEVICE': 'cuda',
+    'DEFAULT_DEVICE': 'cpu',
     # 是否使用安静模式（抑制uv警告）
     'QUIET_MODE': True,
 }

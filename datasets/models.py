@@ -54,8 +54,8 @@ class Dataset:
         try:
             # 获取EOLO项目根目录
             eolo_root = settings.BASE_DIR / 'EOLO'
-            paths_file = eolo_root / 'api' / 'paths.json'
-            
+            paths_file = settings.EOLO_PATHS_JSON
+
             if paths_file.exists():
                 with open(paths_file, 'r', encoding='utf-8') as f:
                     paths_config = json.load(f)
@@ -403,7 +403,7 @@ class DatasetManager:
     """
     
     def __init__(self):
-        self.datasets_dir = getattr(settings, 'DATASETS_DIR', '')
+        self.datasets_dir = getattr(settings, 'EOLO_DATASETS_CONFIGS_DIR', '')
     
     def get_all_datasets(self):
         """获取所有数据集"""
