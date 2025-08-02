@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+
+{% block title %}删除实验 - {{ experiment.name }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-danger text-white">
+                <h4><i class="fas fa-exclamation-triangle me-2"></i>删除实验确认</h4>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>警告：</strong>此操作不可撤销！
+                </div>
+                
+                <p>您确定要删除以下实验吗？</p>
+                
+                <div class="bg-light p-3 rounded mb-3">
+                    <h5>{{ experiment.name }}</h5>
+                    <p class="text-muted mb-1">{{ experiment.description|default:"无描述" }}</p>
+                    <small class="text-muted">
+                        创建时间: {{ experiment.created_at|date:"Y-m-d H:i" }} | 
+                        状态: <span class="badge 
+                            {% if experiment.status == 'pending' %}bg-secondary
+                            {% elif experiment.status == 'running' %}bg-warning
+                            {% elif experiment.status == 'completed' %}bg-success
+                            {% elif experiment.status == 'failed' %}bg-danger
+                            {% else %}bg-dark
+                            {% endif %}">{{ experiment.get_status_display }}</span>
+                    </small>
+                </div>
+                
+                {% if experiment.status == 'running' %}
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle me-2"></i>
+                    <strong>注意：</strong>该实验正在运行中，删除后实验进程可能仍在后台运行。
+                </div>
+                {% endif %}
+                
+                <p><strong>删除后将同时删除：</strong></p>
+                <ul>
+                    <li>实验配置信息</li>
+                    <li>实验日志记录</li>
+                    <li>所有相关数据</li>
+                </ul>
+                
+                <p class="text-muted">
+                    <small><i class="fas fa-info-circle me-1"></i>
+                    注意：实验产生的训练结果文件需要您手动清理。</small>
+                </p>
+            </div>
+            <div class="card-footer">
+                <div class="d-flex justify-content-between">
+                    <a href="{% url 'experiments:detail' experiment.pk %}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-1"></i>取消
+                    </a>
+                    <form method="post" style="display: inline;">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-danger">
+                            <i class="fas fa-trash me-1"></i>确认删除
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

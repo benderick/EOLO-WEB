@@ -1,0 +1,296 @@
+{% extends 'base.html' %}
+
+{% block title %}数据集统计 - EOLO-WEB{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{% url 'datasets:list' %}">数据集</a></li>
+                <li class="breadcrumb-item active">统计</li>
+            </ol>
+        </nav>
+        <h1>
+            <i class="fas fa-chart-bar me-2"></i>数据集统计
+        </h1>
+        <p class="text-muted">数据集的整体统计信息和分析</p>
+    </div>
+    <div class="btn-group">
+        <a href="{% url 'datasets:list' %}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i>返回列表
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <!-- 基本统计 -->
+    <div class="col-md-6 col-lg-3 mb-4">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4>{{ stats.total_datasets }}</h4>
+                        <p class="mb-0">总数据集</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-database fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6 col-lg-3 mb-4">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4>{{ stats.valid_datasets }}</h4>
+                        <p class="mb-0">有效数据集</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-check-circle fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6 col-lg-3 mb-4">
+        <div class="card bg-warning text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4>{{ stats.invalid_datasets }}</h4>
+                        <p class="mb-0">无效数据集</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-exclamation-triangle fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6 col-lg-3 mb-4">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4>{{ stats.total_size_formatted }}</h4>
+                        <p class="mb-0">总大小</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-hdd fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- 类别分布 -->
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-tags me-2"></i>类别数量分布</h5>
+            </div>
+            <div class="card-body">
+                {% if class_distribution %}
+                <div class="table-responsive">
+                    <table class="table table-striped table-sm">
+                        <thead>
+                            <tr>
+                                <th>类别数量</th>
+                                <th>数据集数量</th>
+                                <th>占比</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in class_distribution %}
+                            <tr>
+                                <td>{{ item.class_count }}</td>
+                                <td>{{ item.dataset_count }}</td>
+                                <td>{{ item.percentage }}%</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted">暂无数据</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- 文件大小分布 -->
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-chart-pie me-2"></i>文件大小分布</h5>
+            </div>
+            <div class="card-body">
+                {% if size_distribution %}
+                <div class="table-responsive">
+                    <table class="table table-striped table-sm">
+                        <thead>
+                            <tr>
+                                <th>大小范围</th>
+                                <th>数据集数量</th>
+                                <th>占比</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in size_distribution %}
+                            <tr>
+                                <td>{{ item.size_range }}</td>
+                                <td>{{ item.count }}</td>
+                                <td>{{ item.percentage }}%</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted">暂无数据</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- 最新数据集 -->
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-clock me-2"></i>最新数据集</h5>
+            </div>
+            <div class="card-body">
+                {% if recent_datasets %}
+                <div class="list-group list-group-flush">
+                    {% for dataset in recent_datasets %}
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="mb-1">
+                                <a href="{% url 'datasets:detail' dataset.name %}" class="text-decoration-none">
+                                    {{ dataset.name }}
+                                </a>
+                            </h6>
+                            <small class="text-muted">
+                                {% if dataset.modified_time %}
+                                    {{ dataset.modified_time|date:"Y-m-d H:i" }}
+                                {% else %}
+                                    时间未知
+                                {% endif %}
+                            </small>
+                        </div>
+                        {% if dataset.is_valid %}
+                            <span class="badge bg-success">有效</span>
+                        {% else %}
+                            <span class="badge bg-warning">无效</span>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted">暂无数据集</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- 最大数据集 -->
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-weight-hanging me-2"></i>最大数据集</h5>
+            </div>
+            <div class="card-body">
+                {% if largest_datasets %}
+                <div class="list-group list-group-flush">
+                    {% for dataset in largest_datasets %}
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="mb-1">
+                                <a href="{% url 'datasets:detail' dataset.name %}" class="text-decoration-none">
+                                    {{ dataset.name }}
+                                </a>
+                            </h6>
+                            <small class="text-muted">{{ dataset.size|filesizeformat }}</small>
+                        </div>
+                        {% if dataset.is_valid %}
+                            <span class="badge bg-success">有效</span>
+                        {% else %}
+                            <span class="badge bg-warning">无效</span>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted">暂无数据集</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if common_classes %}
+<!-- 常见类别 -->
+<div class="row">
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-list me-2"></i>常见类别 (前20)</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for class_info in common_classes %}
+                    <div class="col-md-6 col-lg-4 mb-2">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="badge bg-light text-dark border">{{ class_info.name }}</span>
+                            <small class="text-muted">{{ class_info.count }} 次</small>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.card {
+    transition: transform 0.2s;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+}
+
+.list-group-item {
+    border-left: none;
+    border-right: none;
+}
+
+.list-group-item:first-child {
+    border-top: none;
+}
+
+.list-group-item:last-child {
+    border-bottom: none;
+}
+
+.table-responsive {
+    max-height: 400px;
+    overflow-y: auto;
+}
+</style>
+{% endblock %}

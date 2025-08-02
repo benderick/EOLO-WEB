@@ -1,0 +1,670 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ title }} - EOLO-WEB{% endblock %}
+
+{% block extra_css %}
+<style>
+    .device-selection-container {
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        padding: 20px;
+        background-color: #f8f9fa;
+        margin-bottom: 10px;
+    }
+    
+    /* 自定义网格布局 */
+    .device-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;  /* 两列布局 */
+        gap: 15px;
+        margin: 0;
+        padding: 0;
+    }
+    
+    .device-item {
+        background-color: white;
+        border: 2px solid #dee2e6;
+        border-radius: 8px;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        padding: 15px;
+        text-align: center;
+        position: relative;
+        min-height: 80px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .device-item:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+    
+    .device-item.device-available {
+        border-color: #28a745;
+        background-color: #f8fff9;
+    }
+    
+    .device-item.device-busy {
+        border-color: #ffc107;
+        background-color: #fffdf5;
+    }
+    
+    .device-item.device-full {
+        border-color: #dc3545;
+        background-color: #fff5f5;
+    }
+    
+    .device-item.device-selected {
+        background-color: #007bff !important;
+        border-color: #007bff !important;
+    }
+    
+    .device-item.device-selected label {
+        color: white !important;
+        font-weight: 600 !important;
+    }
+    
+    .device-item.device-selected input[type="checkbox"] {
+        filter: brightness(0) invert(1) !important;
+    }
+    
+    .device-status {
+        font-size: 0.8em;
+        margin-top: 5px;
+        font-weight: 500;
+    }
+    
+    .device-available .device-status {
+        color: #28a745;
+    }
+    
+    .device-busy .device-status {
+        color: #ffc107;
+    }
+    
+    .device-full .device-status {
+        color: #dc3545;
+    }
+    
+    .device-usage-bar {
+        width: 100%;
+        height: 6px;
+        background-color: #e9ecef;
+        border-radius: 3px;
+        margin-top: 5px;
+        overflow: hidden;
+    }
+    
+    .device-usage-fill {
+        height: 100%;
+        transition: width 0.3s ease;
+        border-radius: 3px;
+    }
+    
+    .device-available .device-usage-fill {
+        background-color: #28a745;
+    }
+    
+    .device-busy .device-usage-fill {
+        background-color: #ffc107;
+    }
+    
+    .device-full .device-usage-fill {
+        background-color: #dc3545;
+    }
+    
+    /* 配置文件树样式 */
+    .config-tree-section {
+        font-size: 14px;
+    }
+    
+    .config-tree-section h6 {
+        font-weight: 600;
+        margin-bottom: 8px;
+        padding-bottom: 4px;
+        border-bottom: 1px solid #dee2e6;
+    }
+    
+    .form-check {
+        padding-left: 1.5em;
+    }
+    
+    .form-check-input {
+        margin-top: 0.25em;
+    }
+    
+    .form-check-label {
+        font-weight: 500;
+        color: #495057;
+        cursor: pointer;
+    }
+    
+    .form-check-input:checked + .form-check-label {
+        color: #0d6efd;
+        font-weight: 600;
+    }
+    
+    /* 树形结构样式 */
+    .tree-folder {
+        margin-bottom: 4px;
+    }
+    
+    .folder-header {
+        padding: 2px 0;
+        cursor: pointer;
+        user-select: none;
+    }
+    
+    .folder-header:hover {
+        background-color: #f8f9fa;
+        border-radius: 4px;
+        padding: 2px 4px;
+    }
+    
+    .folder-icon {
+        transition: transform 0.2s ease;
+        color: #6c757d;
+    }
+    
+    .folder-checkbox {
+        margin-right: 4px;
+    }
+    
+    .folder-name {
+        font-weight: 500;
+        color: #495057;
+    }
+    
+    .tree-file {
+        padding-left: 20px;
+    }
+    
+    .model-file-checkbox {
+        margin-top: 0.25em;
+    }
+    
+    .folder-content {
+        margin-left: 16px;
+        border-left: 1px dashed #dee2e6;
+        padding-left: 8px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-10">
+            <div class="card shadow">
+                <div class="card-header">
+                    <h4 class="mb-0">
+                        <i class="fas fa-flask me-2"></i>{{ title }}
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+                        
+                        <!-- 基本信息 -->
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <div class="form-group mb-3">
+                                    <label for="{{ form.name.id_for_label }}" class="form-label">
+                                        <i class="fas fa-tag me-1"></i>{{ form.name.label }}
+                                    </label>
+                                    {{ form.name }}
+                                    {% if form.name.help_text %}
+                                        <div class="form-text">{{ form.name.help_text }}</div>
+                                    {% endif %}
+                                    {% if form.name.errors %}
+                                        <div class="text-danger">{{ form.name.errors.0 }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group mb-3">
+                                    <label for="{{ form.project_name.id_for_label }}" class="form-label">
+                                        <i class="fas fa-user me-1"></i>{{ form.project_name.label }}
+                                    </label>
+                                    {{ form.project_name }}
+                                    {% if form.project_name.help_text %}
+                                        <div class="form-text">{{ form.project_name.help_text }}</div>
+                                    {% endif %}
+                                    {% if form.project_name.errors %}
+                                        <div class="text-danger">{{ form.project_name.errors.0 }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 实验描述 -->
+                        <div class="form-group mb-4">
+                            <label for="{{ form.description.id_for_label }}" class="form-label">
+                                <i class="fas fa-comment me-1"></i>{{ form.description.label }}
+                            </label>
+                            {{ form.description }}
+                            {% if form.description.help_text %}
+                                <div class="form-text">{{ form.description.help_text }}</div>
+                            {% endif %}
+                            {% if form.description.errors %}
+                                <div class="text-danger">{{ form.description.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- 配置选择 -->
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <!-- 模型配置选择 -->
+                                <div class="form-group mb-3">
+                                    <label class="form-label">
+                                        <i class="fas fa-cogs me-1"></i>模型配置
+                                        <span class="text-danger">*</span>
+                                    </label>
+                                    <div class="border rounded p-3" style="max-height: 300px; overflow-y: auto;">
+                                        <div id="model-config-container">
+                                            <div class="text-center text-muted py-3">
+                                                <i class="fas fa-spinner fa-spin me-2"></i>正在加载模型配置...
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {{ form.model_configs }}
+                                    {% if form.model_configs.help_text %}
+                                        <div class="form-text">{{ form.model_configs.help_text }}</div>
+                                    {% endif %}
+                                    {% if form.model_configs.errors %}
+                                        <div class="text-danger">{{ form.model_configs.errors.0 }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <!-- 设置配置选择 -->
+                                <div class="form-group mb-3">
+                                    <label class="form-label">
+                                        <i class="fas fa-sliders-h me-1"></i>参数配置
+                                    </label>
+                                    <div class="border rounded p-3" style="max-height: 300px; overflow-y: auto;">
+                                        <div id="setting-config-container">
+                                            <div class="text-center text-muted py-3">
+                                                <i class="fas fa-spinner fa-spin me-2"></i>正在加载参数配置...
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {{ form.setting_config }}
+                                    {% if form.setting_config.help_text %}
+                                        <div class="form-text">{{ form.setting_config.help_text }}</div>
+                                    {% endif %}
+                                    {% if form.setting_config.errors %}
+                                        <div class="text-danger">{{ form.setting_config.errors.0 }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 数据集选择 -->
+                        <div class="form-group mb-4">
+                            <label for="{{ form.dataset.id_for_label }}" class="form-label">
+                                <i class="fas fa-database me-1"></i>{{ form.dataset.label }}
+                                <span class="text-danger">*</span>
+                            </label>
+                            {{ form.dataset }}
+                            {% if form.dataset.help_text %}
+                                <div class="form-text">{{ form.dataset.help_text }}</div>
+                            {% endif %}
+                            {% if form.dataset.errors %}
+                                <div class="text-danger">{{ form.dataset.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- 训练参数 -->
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <div class="form-group mb-3">
+                                    <label for="{{ form.epochs.id_for_label }}" class="form-label">
+                                        <i class="fas fa-repeat me-1"></i>{{ form.epochs.label }}
+                                        <span class="text-danger">*</span>
+                                    </label>
+                                    {{ form.epochs }}
+                                    {% if form.epochs.help_text %}
+                                        <div class="form-text">{{ form.epochs.help_text }}</div>
+                                    {% endif %}
+                                    {% if form.epochs.errors %}
+                                        <div class="text-danger">{{ form.epochs.errors.0 }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group mb-3">
+                                    <label for="{{ form.batch_size.id_for_label }}" class="form-label">
+                                        <i class="fas fa-layer-group me-1"></i>{{ form.batch_size.label }}
+                                        <span class="text-danger">*</span>
+                                    </label>
+                                    {{ form.batch_size }}
+                                    {% if form.batch_size.help_text %}
+                                        <div class="form-text">{{ form.batch_size.help_text }}</div>
+                                    {% endif %}
+                                    {% if form.batch_size.errors %}
+                                        <div class="text-danger">{{ form.batch_size.errors.0 }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 设备选择 -->
+                        <div class="form-group mb-4">
+                            <label class="form-label">
+                                <i class="fas fa-microchip me-1"></i>{{ form.device.label }}
+                            </label>
+                            <div class="device-selection-container">
+                                {{ form.device }}
+                            </div>
+                            {% if form.device.help_text %}
+                                <div class="form-text">{{ form.device.help_text }}</div>
+                            {% endif %}
+                            {% if form.device.errors %}
+                                <div class="text-danger">{{ form.device.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- 可选参数 -->
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <div class="form-group mb-3">
+                                    <label for="{{ form.experiment_name.id_for_label }}" class="form-label">
+                                        <i class="fas fa-file-signature me-1"></i>{{ form.experiment_name.label }}
+                                    </label>
+                                    {{ form.experiment_name }}
+                                    {% if form.experiment_name.help_text %}
+                                        <div class="form-text">{{ form.experiment_name.help_text }}</div>
+                                    {% endif %}
+                                    {% if form.experiment_name.errors %}
+                                        <div class="text-danger">{{ form.experiment_name.errors.0 }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group mb-3">
+                                    <label for="{{ form.save_dir.id_for_label }}" class="form-label">
+                                        <i class="fas fa-folder me-1"></i>{{ form.save_dir.label }}
+                                    </label>
+                                    {{ form.save_dir }}
+                                    {% if form.save_dir.help_text %}
+                                        <div class="form-text">{{ form.save_dir.help_text }}</div>
+                                    {% endif %}
+                                    {% if form.save_dir.errors %}
+                                        <div class="text-danger">{{ form.save_dir.errors.0 }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 提交按钮 -->
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <a href="{% url 'experiments:experiment_list' %}" class="btn btn-secondary me-md-2">
+                                <i class="fas fa-arrow-left me-1"></i>返回
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-1"></i>创建实验
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 表单增强功能
+document.addEventListener('DOMContentLoaded', function() {
+    // 为所有输入字段添加 form-control 类
+    const inputs = document.querySelectorAll('input, select, textarea');
+    inputs.forEach(input => {
+        if (!input.classList.contains('form-control')) {
+            input.classList.add('form-control');
+        }
+    });
+    
+    // 加载配置文件树
+    loadConfigurationTrees();
+});
+
+// 加载配置文件树
+function loadConfigurationTrees() {
+    // 加载模型配置
+    fetch('/models/api/tree/')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                renderModelConfigTree(data.data);
+            } else {
+                document.getElementById('model-config-container').innerHTML = 
+                    '<div class="text-danger">加载模型配置失败: ' + data.error + '</div>';
+            }
+        })
+        .catch(error => {
+            document.getElementById('model-config-container').innerHTML = 
+                '<div class="text-danger">网络错误，无法加载模型配置</div>';
+        });
+    
+    // 加载设置配置
+    fetch('/models/api/settings/tree/')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                renderSettingConfigTree(data.data);
+            } else {
+                document.getElementById('setting-config-container').innerHTML = 
+                    '<div class="text-danger">加载参数配置失败: ' + data.error + '</div>';
+            }
+        })
+        .catch(error => {
+            document.getElementById('setting-config-container').innerHTML = 
+                '<div class="text-danger">网络错误，无法加载参数配置</div>';
+        });
+}
+
+// 渲染模型配置文件树
+function renderModelConfigTree(treeData) {
+    const container = document.getElementById('model-config-container');
+    let html = '<div class="config-tree-section">';
+    
+    // 渲染common模型配置
+    if (treeData.common && treeData.common.children) {
+        html += '<h6 class="text-info mb-2"><i class="fas fa-cube me-1"></i>通用模型 (common)</h6>';
+        html += renderModelTree(treeData.common.children, 'common');
+    }
+    
+    // 渲染用户模型配置
+    if (treeData.user && treeData.user.children) {
+        html += '<h6 class="text-success mb-2 mt-3"><i class="fas fa-user me-1"></i>我的模型 (' + treeData.username + ')</h6>';
+        html += renderModelTree(treeData.user.children, treeData.username);
+    }
+    
+    html += '</div>';
+    container.innerHTML = html;
+    
+    // 设置默认选择（基于上次选择）
+    const defaultModels = document.getElementById('id_model_configs').value;
+    if (defaultModels && defaultModels.trim()) {
+        const selectedModels = defaultModels.split(',').map(m => m.trim()).filter(m => m);
+        console.log('正在恢复上次选择的模型配置:', selectedModels);
+        selectedModels.forEach(modelPath => {
+            const checkbox = document.querySelector(`input[name="model_config_checkbox"][value="${modelPath}"]`);
+            if (checkbox) {
+                checkbox.checked = true;
+                console.log('已选择模型配置:', modelPath);
+            } else {
+                console.warn('找不到模型配置:', modelPath);
+            }
+        });
+    }
+}
+
+// 渲染设置配置文件树
+function renderSettingConfigTree(treeData) {
+    const container = document.getElementById('setting-config-container');
+    let html = '<div class="config-tree-section">';
+    
+    // 渲染default配置
+    if (treeData.default && treeData.default.children) {
+        html += '<h6 class="text-info mb-2"><i class="fas fa-globe me-1"></i>默认配置 (default)</h6>';
+        html += renderConfigNodes(treeData.default.children, 'default', 'setting');
+    }
+    
+    // 渲染用户配置
+    if (treeData.user && treeData.user.children) {
+        html += '<h6 class="text-success mb-2 mt-3"><i class="fas fa-user me-1"></i>我的配置 (' + treeData.username + ')</h6>';
+        html += renderConfigNodes(treeData.user.children, treeData.username, 'setting');
+    }
+    
+    html += '</div>';
+    container.innerHTML = html;
+    
+    // 设置默认选择（基于上次选择或默认选择yolo）
+    const defaultSetting = document.getElementById('id_setting_config').value;
+    let hasSelection = false;
+    
+    // 首先尝试选择上次的配置
+    if (defaultSetting && defaultSetting.trim()) {
+        const radioButton = document.querySelector(`input[name="setting_config_radio"][value="${defaultSetting}"]`);
+        if (radioButton) {
+            radioButton.checked = true;
+            hasSelection = true;
+            console.log('已选择上次的参数配置:', defaultSetting);
+        }
+    }
+    
+    // 如果没有上次的选择或找不到上次的配置，尝试默认选择包含"yolo"的配置
+    if (!hasSelection) {
+        const yoloRadio = document.querySelector('input[name="setting_config_radio"][value*="yolo"]');
+        if (yoloRadio) {
+            yoloRadio.checked = true;
+            document.getElementById('id_setting_config').value = yoloRadio.value;
+            console.log('已默认选择yolo参数配置:', yoloRadio.value);
+        }
+    }
+}
+
+// 渲染设置配置节点
+function renderConfigNodes(nodes, pathPrefix, configType) {
+    let html = '';
+    
+    nodes.forEach(function(node) {
+        if (node.is_file) {
+            // 只显示.yaml文件
+            if (node.name.endsWith('.yaml') || node.name.endsWith('.yml')) {
+                const displayName = node.name.replace(/\.(yaml|yml)$/, ''); // 隐藏扩展名
+                const fullPath = pathPrefix + '/' + displayName;
+                const nodeId = configType + '_' + fullPath.replace(/[\/\s]/g, '_');
+                
+                html += '<div class="form-check mb-1">';
+                html += '<input class="form-check-input" type="radio" name="setting_config_radio" id="' + nodeId + '" value="' + fullPath + '" onchange="selectSettingConfig(this)">';
+                html += '<label class="form-check-label" for="' + nodeId + '">' + displayName + '</label>';
+                html += '</div>';
+            }
+        } else if (node.children && node.children.length > 0) {
+            // 渲染文件夹内容（递归）
+            const folderPrefix = pathPrefix + '/' + node.name;
+            html += renderConfigNodes(node.children, folderPrefix, configType);
+        }
+    });
+    
+    return html;
+}
+
+// 渲染模型树形结构（支持文件夹展开/折叠和全选）
+function renderModelTree(nodes, prefix, level = 0) {
+    let html = '';
+    
+    nodes.forEach(function(node) {
+        const fullPath = prefix + '/' + node.name;
+        const nodeId = 'model_' + fullPath.replace(/[^a-zA-Z0-9]/g, '_');
+        
+        if (!node.is_file) {
+            // 文件夹节点
+            html += `<div class="tree-folder" style="margin-left: ${level * 20}px;">`;
+            html += `<div class="folder-header d-flex align-items-center mb-1" onclick="toggleFolder('${nodeId}')">`;
+            html += `<i class="fas fa-chevron-right folder-icon me-1" id="${nodeId}_icon" style="cursor: pointer; font-size: 12px;"></i>`;
+            html += `<input type="checkbox" class="folder-checkbox me-1" id="${nodeId}_cb" onchange="toggleFolderSelection('${nodeId}', '${fullPath}')" onclick="event.stopPropagation()" />`;
+            html += `<i class="fas fa-folder text-warning me-1"></i>`;
+            html += `<span class="folder-name" style="cursor: pointer;">${node.name}</span>`;
+            html += `</div>`;
+            html += `<div class="folder-content" id="${nodeId}_content" style="display: none;">`;
+            
+            // 递归渲染子节点
+            if (node.children) {
+                html += renderModelTree(node.children, fullPath, level + 1);
+            }
+            
+            html += `</div></div>`;
+        } else if (node.is_file && (node.name.endsWith('.yaml') || node.name.endsWith('.yml'))) {
+            // 文件节点（只显示yaml文件）
+            const displayName = node.name.replace(/\.(yaml|yml)$/, ''); // 隐藏扩展名
+            const configPath = fullPath.replace(/\.(yaml|yml)$/, '');
+            html += `<div class="tree-file form-check mb-1" style="margin-left: ${level * 20}px;">`;
+            html += `<input type="checkbox" class="form-check-input model-file-checkbox" name="model_config_checkbox" value="${configPath}" id="${nodeId}" onchange="updateSelectedModels()" />`;
+            html += `<label class="form-check-label ms-1" for="${nodeId}">`;
+            html += `<i class="fas fa-file-code text-primary me-1"></i>${displayName}`;
+            html += `</label></div>`;
+        }
+    });
+    
+    return html;
+}
+
+// 文件夹展开/折叠功能
+function toggleFolder(folderId) {
+    const content = document.getElementById(folderId + '_content');
+    const icon = document.getElementById(folderId + '_icon');
+    
+    if (content.style.display === 'none') {
+        content.style.display = 'block';
+        icon.className = 'fas fa-chevron-down folder-icon me-1';
+    } else {
+        content.style.display = 'none';
+        icon.className = 'fas fa-chevron-right folder-icon me-1';
+    }
+}
+
+// 文件夹全选功能
+function toggleFolderSelection(folderId, folderPath) {
+    const folderCheckbox = document.getElementById(folderId + '_cb');
+    const content = document.getElementById(folderId + '_content');
+    const fileCheckboxes = content.querySelectorAll('input[type="checkbox"].model-file-checkbox');
+    
+    // 根据文件夹复选框状态选中/取消选中所有文件
+    fileCheckboxes.forEach(checkbox => {
+        checkbox.checked = folderCheckbox.checked;
+    });
+    
+    // 递归处理子文件夹
+    const subFolders = content.querySelectorAll('.folder-checkbox');
+    subFolders.forEach(subFolder => {
+        subFolder.checked = folderCheckbox.checked;
+    });
+    
+    updateSelectedModels();
+}
+
+// 更新选中的模型列表
+function updateSelectedModels() {
+    const selectedModels = [];
+    const checkboxes = document.querySelectorAll('input[name="model_config_checkbox"]:checked');
+    checkboxes.forEach(cb => {
+        selectedModels.push(cb.value);
+    });
+    document.getElementById('id_model_configs').value = selectedModels.join(', ');
+}
+
+// 选择设置配置（单选）
+function selectSettingConfig(radio) {
+    document.getElementById('id_setting_config').value = radio.value;
+}
+</script>
+{% endblock %}

@@ -1,0 +1,257 @@
+{% extends 'base.html' %}
+
+{% block title %}数据集管理 - EOLO-WEB{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="fas fa-database me-2"></i>数据集管理</h1>
+    <div class="d-flex gap-2">
+        <a href="{% url 'datasets:stats' %}" class="btn btn-outline-info">
+            <i class="fas fa-chart-bar me-1"></i>统计信息
+        </a>
+    </div>
+</div>
+
+<!-- 统计卡片 -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4>{{ total_datasets }}</h4>
+                        <p class="mb-0">总数据集</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-database fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4>{{ valid_datasets }}</h4>
+                        <p class="mb-0">有效数据集</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-check-circle fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card bg-warning text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4>{{ invalid_datasets }}</h4>
+                        <p class="mb-0">无效数据集</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-exclamation-triangle fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 搜索栏 -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-8">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                    <input type="text" name="search" class="form-control" 
+                           placeholder="搜索数据集名称、描述或类别..." 
+                           value="{{ search_query }}">
+                </div>
+            </div>
+            <div class="col-md-4 d-flex gap-2">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-search me-1"></i>搜索
+                </button>
+                {% if search_query %}
+                <a href="{% url 'datasets:list' %}" class="btn btn-outline-secondary">
+                    <i class="fas fa-times me-1"></i>清除
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 数据集网格 -->
+<div class="row">
+    {% if page_obj %}
+        {% for dataset in page_obj %}
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100 {% if not dataset.is_valid %}border-warning{% endif %}">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">
+                        <a href="{% url 'datasets:detail' dataset.name %}" class="text-decoration-none">
+                            {{ dataset.name }}
+                        </a>
+                    </h6>
+                    {% if dataset.is_valid %}
+                        <span class="badge bg-success">有效</span>
+                    {% else %}
+                        <span class="badge bg-warning">无效</span>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <small class="text-muted">
+                            <i class="fas fa-file me-1"></i>{{ dataset.filename }}
+                        </small>
+                    </div>
+                    
+                    {% if dataset.description %}
+                    <p class="card-text">{{ dataset.description|truncatechars:100 }}</p>
+                    {% endif %}
+                    
+                    {% if dataset.is_valid %}
+                    <div class="row text-center mb-2">
+                        <div class="col-6">
+                            <small class="text-muted">类别数</small>
+                            <div class="fw-bold text-primary">{{ dataset.nc }}</div>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted">大小</small>
+                            <div class="fw-bold">{{ dataset.size|filesizeformat }}</div>
+                        </div>
+                    </div>
+                    
+                    {% if dataset.names %}
+                    <div class="mb-2">
+                        <small class="text-muted">类别:</small>
+                        <div class="mt-1">
+                            {% for name in dataset.names|slice:":3" %}
+                                <span class="badge bg-secondary me-1">{{ name }}</span>
+                            {% endfor %}
+                            {% if dataset.names|length > 3 %}
+                                <span class="text-muted">+{{ dataset.names|length|add:"-3" }}个</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% endif %}
+                    
+                    {% if dataset.modified_time %}
+                    <div class="text-muted">
+                        <small>
+                            <i class="fas fa-clock me-1"></i>
+                            修改于 {{ dataset.modified_time|date:"Y-m-d H:i" }}
+                        </small>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="card-footer">
+                    <div class="d-flex justify-content-between">
+                        <a href="{% url 'datasets:detail' dataset.name %}" class="btn btn-sm btn-primary">
+                            <i class="fas fa-eye me-1"></i>查看详情
+                        </a>
+                        {% if dataset.is_valid %}
+                        <button class="btn btn-sm btn-outline-success" 
+                                onclick="copyDatasetPath('{{ dataset.name }}', '{{ dataset.file_path }}')">
+                            <i class="fas fa-copy me-1"></i>复制路径
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="col-12">
+            <div class="text-center text-muted py-5">
+                <i class="fas fa-database fa-3x mb-3"></i>
+                <h4>没有找到数据集</h4>
+                {% if search_query %}
+                <p>没有找到匹配"{{ search_query }}"的数据集</p>
+                <a href="{% url 'datasets:list' %}" class="btn btn-primary">查看所有数据集</a>
+                {% else %}
+                <p>数据集目录为空或无法访问</p>
+                <p class="text-muted">
+                    <small>请确保数据集目录存在且包含.yaml文件</small>
+                </p>
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
+</div>
+
+<!-- 分页 -->
+{% if page_obj.has_other_pages %}
+<nav aria-label="数据集列表分页">
+    <ul class="pagination justify-content-center mt-4">
+        {% if page_obj.has_previous %}
+        <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}">
+                <i class="fas fa-chevron-left"></i> 上一页
+            </a>
+        </li>
+        {% endif %}
+        
+        {% for num in page_obj.paginator.page_range %}
+        {% if page_obj.number == num %}
+        <li class="page-item active">
+            <span class="page-link">{{ num }}</span>
+        </li>
+        {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+        <li class="page-item">
+            <a class="page-link" href="?page={{ num }}{% if search_query %}&search={{ search_query }}{% endif %}">{{ num }}</a>
+        </li>
+        {% endif %}
+        {% endfor %}
+        
+        {% if page_obj.has_next %}
+        <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}">
+                下一页 <i class="fas fa-chevron-right"></i>
+            </a>
+        </li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function copyDatasetPath(name, path) {
+    const text = path;
+    navigator.clipboard.writeText(text).then(function() {
+        showToast(`数据集 ${name} 的路径已复制到剪贴板`, 'success');
+    }, function(err) {
+        console.error('复制失败: ', err);
+        showToast('复制失败', 'error');
+    });
+}
+
+// 搜索自动完成
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.querySelector('input[name="search"]');
+    if (searchInput) {
+        let timeout;
+        searchInput.addEventListener('input', function() {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => {
+                const query = this.value.trim();
+                if (query.length >= 2) {
+                    // 可以在这里添加实时搜索建议
+                }
+            }, 300);
+        });
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,17 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Django静态文件收集目录（生产环境用）
+staticfiles/
+
+# 其他临时文件
+*.log
+.DS_Store

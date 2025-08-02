@@ -1,0 +1,513 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ experiment.name }} - 实验详情{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1><i class="fas fa-flask me-2"></i>{{ experiment.name }}</h1>
+        <p class="text-muted mb-2">{{ experiment.description|default:"无描述" }}</p>
+        <!-- 状态显示 -->
+        <div class="d-flex align-items-center">
+            <span class="me-2">状态：</span>
+            {% if experiment.status == 'pending' %}
+                <span class="badge bg-secondary fs-6">
+                    <i class="fas fa-clock me-1"></i>待启动
+                </span>
+            {% elif experiment.status == 'queued' %}
+                <span class="badge bg-warning fs-6">
+                    <i class="fas fa-hourglass-half me-1"></i>排队
+                </span>
+            {% elif experiment.status == 'running' %}
+                <span class="badge bg-primary fs-6">
+                    <i class="fas fa-play me-1"></i>运行
+                </span>
+            {% elif experiment.status == 'error' %}
+                <span class="badge bg-danger fs-6">
+                    <i class="fas fa-exclamation-triangle me-1"></i>错误
+                </span>
+            {% elif experiment.status == 'completed' %}
+                <span class="badge bg-success fs-6">
+                    <i class="fas fa-check me-1"></i>结束
+                </span>
+            {% else %}
+                <span class="badge bg-light text-dark fs-6">未知状态</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="btn-group">
+        {% if experiment.status == 'pending' %}
+            <a href="{% url 'experiments:edit' experiment.pk %}" class="btn btn-outline-primary">
+                <i class="fas fa-edit me-1"></i>编辑
+            </a>
+            <form method="post" action="{% url 'experiments:start' experiment.pk %}" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-success" onclick="return confirm('确认启动实验？')">
+                    <i class="fas fa-play me-1"></i>启动实验
+                </button>
+            </form>
+        {% elif experiment.status == 'running' %}
+            <form method="post" action="{% url 'experiments:stop' experiment.pk %}" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-warning" onclick="return confirm('确认停止实验？')">
+                    <i class="fas fa-stop me-1"></i>停止实验
+                </button>
+            </form>
+        {% elif experiment.status == 'error' %}
+            <form method="post" action="{% url 'experiments:restart' experiment.pk %}" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-info" onclick="return confirm('确认重新启动实验？')">
+                    <i class="fas fa-redo me-1"></i>重新启动
+                </button>
+            </form>
+        {% endif %}
+        
+        <a href="{% url 'experiments:delete' experiment.pk %}" class="btn btn-outline-danger">
+            <i class="fas fa-trash me-1"></i>删除
+        </a>
+    </div>
+</div>
+
+<!-- 时间信息卡片 -->
+{% if experiment.created_at or experiment.started_at or experiment.completed_at %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h5><i class="fas fa-clock me-2"></i>时间信息</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            {% if experiment.created_at %}
+            <div class="col-md-4">
+                <div class="text-center">
+                    <i class="fas fa-plus-circle text-info fa-2x mb-2"></i>
+                    <h6>创建时间</h6>
+                    <p class="text-muted mb-0">{{ experiment.created_at|date:"Y-m-d H:i:s" }}</p>
+                </div>
+            </div>
+            {% endif %}
+            {% if experiment.started_at %}
+            <div class="col-md-4">
+                <div class="text-center">
+                    <i class="fas fa-play-circle text-success fa-2x mb-2"></i>
+                    <h6>启动时间</h6>
+                    <p class="text-muted mb-0">{{ experiment.started_at|date:"Y-m-d H:i:s" }}</p>
+                </div>
+            </div>
+            {% endif %}
+            {% if experiment.completed_at %}
+            <div class="col-md-4">
+                <div class="text-center">
+                    <i class="fas fa-check-circle text-primary fa-2x mb-2"></i>
+                    <h6>完成时间</h6>
+                    <p class="text-muted mb-0">{{ experiment.completed_at|date:"Y-m-d H:i:s" }}</p>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% if experiment.started_at and experiment.completed_at %}
+        <div class="text-center mt-3 pt-3 border-top">
+            <h6>运行时长</h6>
+            <p class="text-muted mb-0">
+                {% with duration=experiment.completed_at|timeuntil:experiment.started_at %}
+                    {{ duration }}
+                {% endwith %}
+            </p>
+        </div>
+        {% elif experiment.started_at and experiment.status == 'running' %}
+        <div class="text-center mt-3 pt-3 border-top">
+            <h6>已运行时长</h6>
+            <p class="text-muted mb-0">
+                {% now "Y-m-d H:i:s" as current_time %}
+                {% with duration=current_time|timeuntil:experiment.started_at %}
+                    {{ duration }}
+                {% endwith %}
+            </p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<div class="row">
+    <!-- 实验配置信息 -->
+    <div class="col-lg-8">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5><i class="fas fa-cog me-2"></i>实验配置</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <h6 class="text-muted mb-2"><i class="fas fa-cube me-1"></i>模型信息</h6>
+                            <div class="d-flex align-items-center mb-2">
+                                <span class="me-2">任务类型：</span>
+                                <span class="badge bg-info">{{ experiment.get_task_type_display }}</span>
+                            </div>
+                            <div class="mb-2">
+                                <span class="me-2">模型名称：</span>
+                                <code class="bg-light px-2 py-1 rounded">{{ experiment.model_name }}</code>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <h6 class="text-muted mb-2"><i class="fas fa-database me-1"></i>数据集信息</h6>
+                            <div class="d-flex align-items-center mb-1">
+                                <a href="{% url 'datasets:detail' experiment.dataset %}" class="text-decoration-none me-2">
+                                    <i class="fas fa-external-link-alt me-1"></i>{{ experiment.dataset }}
+                                </a>
+                                {% if experiment.dataset_info %}
+                                    <span class="badge bg-secondary">{{ experiment.dataset_info.nc }}类</span>
+                                {% endif %}
+                            </div>
+                            {% if experiment.dataset_info %}
+                                <small class="text-muted d-block">{{ experiment.dataset_info.description|default:"" }}</small>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            <h6 class="text-muted mb-2"><i class="fas fa-user me-1"></i>其他信息</h6>
+                            <div class="mb-1">
+                                <span class="me-2">创建用户：</span>
+                                <span class="badge bg-outline-primary">{{ experiment.user.username }}</span>
+                            </div>
+                            <div class="mb-1">
+                                <span class="me-2">设备：</span>
+                                <code class="bg-light px-2 py-1 rounded">{{ experiment.device }}</code>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <h6 class="text-muted mb-2"><i class="fas fa-sliders-h me-1"></i>训练参数</h6>
+                            <div class="row g-3">
+                                <div class="col-6">
+                                    <div class="text-center p-2 bg-light rounded">
+                                        <div class="h5 mb-0 text-primary">{{ experiment.epochs }}</div>
+                                        <small class="text-muted">训练轮数</small>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="text-center p-2 bg-light rounded">
+                                        <div class="h5 mb-0 text-success">{{ experiment.batch_size }}</div>
+                                        <small class="text-muted">批量大小</small>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="text-center p-2 bg-light rounded">
+                                        <div class="h5 mb-0 text-info">{{ experiment.image_size }}</div>
+                                        <small class="text-muted">图像大小</small>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="text-center p-2 bg-light rounded">
+                                        <div class="h5 mb-0 text-warning">{{ experiment.workers }}</div>
+                                        <small class="text-muted">工作进程</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <h6 class="text-muted mb-2"><i class="fas fa-chart-line me-1"></i>优化参数</h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-borderless">
+                                    <tr>
+                                        <td>学习率：</td>
+                                        <td><code>{{ experiment.learning_rate }}</code></td>
+                                    </tr>
+                                    <tr>
+                                        <td>权重衰减：</td>
+                                        <td><code>{{ experiment.weight_decay|default:"默认" }}</code></td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 生成的命令 -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-terminal me-2"></i>训练命令</h5>
+                <button class="btn btn-sm btn-outline-secondary" onclick="copyCommand()">
+                    <i class="fas fa-copy me-1"></i>复制命令
+                </button>
+            </div>
+            <div class="card-body">
+                {% if experiment.command %}
+                <div class="bg-dark text-light p-3 rounded position-relative">
+                    <code id="command-text" style="color: #00ff00; font-family: 'Courier New', monospace; word-break: break-all;">{{ experiment.command }}</code>
+                </div>
+                <small class="text-muted mt-2 d-block">
+                    <i class="fas fa-info-circle me-1"></i>此命令在实验启动时自动执行
+                </small>
+                {% else %}
+                <div class="text-center py-4">
+                    <i class="fas fa-exclamation-triangle text-warning fa-2x mb-2"></i>
+                    <div class="text-muted">命令尚未生成</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- 侧边栏：状态和统计 -->
+    <div class="col-lg-4">
+        <!-- 当前状态卡片 -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5><i class="fas fa-info-circle me-2"></i>实验状态</h5>
+            </div>
+            <div class="card-body text-center">
+                {% if experiment.status == 'pending' %}
+                    <i class="fas fa-clock text-secondary fa-3x mb-3"></i>
+                    <h5 class="text-secondary">待启动</h5>
+                    <p class="text-muted">实验已创建，等待启动</p>
+                {% elif experiment.status == 'queued' %}
+                    <i class="fas fa-hourglass-half text-warning fa-3x mb-3"></i>
+                    <h5 class="text-warning">排队中</h5>
+                    <p class="text-muted">实验在队列中等待执行</p>
+                {% elif experiment.status == 'running' %}
+                    <i class="fas fa-play text-primary fa-3x mb-3"></i>
+                    <h5 class="text-primary">运行中</h5>
+                    <p class="text-muted">实验正在进行训练</p>
+                    <div class="progress mt-3">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%"></div>
+                    </div>
+                {% elif experiment.status == 'error' %}
+                    <i class="fas fa-exclamation-triangle text-danger fa-3x mb-3"></i>
+                    <h5 class="text-danger">错误</h5>
+                    <p class="text-muted">实验执行过程中发生错误</p>
+                    {% if experiment.error_message %}
+                    <div class="alert alert-danger text-start mt-3">
+                        <small>{{ experiment.error_message|truncatewords:20 }}</small>
+                    </div>
+                    {% endif %}
+                {% elif experiment.status == 'completed' %}
+                    <i class="fas fa-check-circle text-success fa-3x mb-3"></i>
+                    <h5 class="text-success">已完成</h5>
+                    <p class="text-muted">实验训练已成功完成</p>
+                {% else %}
+                    <i class="fas fa-question-circle text-muted fa-3x mb-3"></i>
+                    <h5 class="text-muted">未知状态</h5>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- 输出配置卡片 -->
+        {% if experiment.project_name or experiment.experiment_name or experiment.save_dir %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5><i class="fas fa-folder-open me-2"></i>输出配置</h5>
+            </div>
+            <div class="card-body">
+                {% if experiment.project_name %}
+                <div class="mb-2">
+                    <small class="text-muted">项目名称：</small>
+                    <div><code>{{ experiment.project_name }}</code></div>
+                </div>
+                {% endif %}
+                {% if experiment.experiment_name %}
+                <div class="mb-2">
+                    <small class="text-muted">实验名称：</small>
+                    <div><code>{{ experiment.experiment_name }}</code></div>
+                </div>
+                {% endif %}
+                {% if experiment.save_dir %}
+                <div class="mb-2">
+                    <small class="text-muted">保存目录：</small>
+                    <div><code>{{ experiment.save_dir }}</code></div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- 结果文件卡片 -->
+        {% if experiment.log_file or experiment.result_file %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5><i class="fas fa-file-alt me-2"></i>结果文件</h5>
+            </div>
+            <div class="card-body">
+                {% if experiment.log_file %}
+                <div class="mb-2">
+                    <a href="{{ experiment.log_file }}" class="btn btn-sm btn-outline-primary w-100">
+                        <i class="fas fa-file-text me-1"></i>查看日志
+                    </a>
+                </div>
+                {% endif %}
+                {% if experiment.result_file %}
+                <div class="mb-2">
+                    <a href="{{ experiment.result_file }}" class="btn btn-sm btn-outline-success w-100">
+                        <i class="fas fa-download me-1"></i>下载结果
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+        
+        <!-- 实验日志 -->
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-file-alt me-2"></i>实验日志</h5>
+            </div>
+            <div class="card-body">
+                {% if logs %}
+                <div class="log-container" style="max-height: 400px; overflow-y: auto;">
+                    {% for log in logs %}
+                    <div class="log-entry mb-2 p-2 border-left border-primary">
+                        <div class="d-flex justify-content-between">
+                            <small class="text-muted">{{ log.timestamp|date:"Y-m-d H:i:s" }}</small>
+                            <span class="badge 
+                                {% if log.level == 'ERROR' %}bg-danger
+                                {% elif log.level == 'WARNING' %}bg-warning
+                                {% elif log.level == 'INFO' %}bg-info
+                                {% else %}bg-secondary
+                                {% endif %}">{{ log.level }}</span>
+                        </div>
+                        <div class="mt-1">{{ log.message }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-muted text-center py-4">
+                    <i class="fas fa-file-alt fa-2x mb-2"></i>
+                    <p>暂无日志记录</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- 状态和时间信息 -->
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5><i class="fas fa-clock me-2"></i>状态信息</h5>
+            </div>
+            <div class="card-body">
+                <div class="text-center mb-3">
+                    {% if experiment.status == 'pending' %}
+                        <i class="fas fa-hourglass-start fa-3x text-secondary mb-2"></i>
+                        <h5><span class="badge bg-secondary">{{ experiment.get_status_display }}</span></h5>
+                    {% elif experiment.status == 'running' %}
+                        <i class="fas fa-play-circle fa-3x text-warning mb-2"></i>
+                        <h5><span class="badge bg-warning">{{ experiment.get_status_display }}</span></h5>
+                    {% elif experiment.status == 'completed' %}
+                        <i class="fas fa-check-circle fa-3x text-success mb-2"></i>
+                        <h5><span class="badge bg-success">{{ experiment.get_status_display }}</span></h5>
+                    {% elif experiment.status == 'failed' %}
+                        <i class="fas fa-times-circle fa-3x text-danger mb-2"></i>
+                        <h5><span class="badge bg-danger">{{ experiment.get_status_display }}</span></h5>
+                    {% else %}
+                        <i class="fas fa-ban fa-3x text-dark mb-2"></i>
+                        <h5><span class="badge bg-dark">{{ experiment.get_status_display }}</span></h5>
+                    {% endif %}
+                </div>
+                
+                <table class="table table-sm">
+                    <tr>
+                        <th>创建时间:</th>
+                        <td>{{ experiment.created_at|date:"Y-m-d H:i" }}</td>
+                    </tr>
+                    {% if experiment.started_at %}
+                    <tr>
+                        <th>开始时间:</th>
+                        <td>{{ experiment.started_at|date:"Y-m-d H:i" }}</td>
+                    </tr>
+                    {% endif %}
+                    {% if experiment.completed_at %}
+                    <tr>
+                        <th>完成时间:</th>
+                        <td>{{ experiment.completed_at|date:"Y-m-d H:i" }}</td>
+                    </tr>
+                    {% endif %}
+                    <tr>
+                        <th>最后更新:</th>
+                        <td>{{ experiment.updated_at|date:"Y-m-d H:i" }}</td>
+                    </tr>
+                </table>
+                
+                {% if experiment.error_message %}
+                <div class="alert alert-danger mt-3">
+                    <h6><i class="fas fa-exclamation-triangle me-1"></i>错误信息:</h6>
+                    <p class="mb-0">{{ experiment.error_message }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- 输出配置 -->
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-folder-open me-2"></i>输出配置</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <tr>
+                        <th>项目名称:</th>
+                        <td>{{ experiment.project_name|default:"默认" }}</td>
+                    </tr>
+                    <tr>
+                        <th>实验名称:</th>
+                        <td>{{ experiment.experiment_name|default:"自动生成" }}</td>
+                    </tr>
+                    <tr>
+                        <th>保存目录:</th>
+                        <td>{{ experiment.save_dir|default:"默认目录" }}</td>
+                    </tr>
+                    {% if experiment.log_file %}
+                    <tr>
+                        <th>日志文件:</th>
+                        <td><code>{{ experiment.log_file }}</code></td>
+                    </tr>
+                    {% endif %}
+                    {% if experiment.result_file %}
+                    <tr>
+                        <th>结果文件:</th>
+                        <td><code>{{ experiment.result_file }}</code></td>
+                    </tr>
+                    {% endif %}
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function copyCommand() {
+    const commandText = document.getElementById('command-text').textContent;
+    navigator.clipboard.writeText(commandText).then(function() {
+        // 显示复制成功提示
+        const button = event.target.closest('button');
+        const originalText = button.innerHTML;
+        button.innerHTML = '<i class="fas fa-check me-1"></i>已复制';
+        button.classList.remove('btn-outline-secondary');
+        button.classList.add('btn-success');
+        
+        setTimeout(function() {
+            button.innerHTML = originalText;
+            button.classList.remove('btn-success');
+            button.classList.add('btn-outline-secondary');
+        }, 2000);
+    });
+}
+
+// 自动刷新运行中的实验状态
+{% if experiment.status == 'running' %}
+setInterval(function() {
+    location.reload();
+}, 30000); // 每30秒刷新一次
+{% endif %}
+</script>
+{% endblock %}

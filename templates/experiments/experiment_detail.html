@@ -1,0 +1,909 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ experiment.name }} - 实验详情{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1><i class="fas fa-flask me-2"></i>{{ experiment.name }}</h1>
+        <p class="text-muted mb-2">{{ experiment.description|default:"无描述" }}</p>
+        <!-- 状态显示 -->
+        <div class="d-flex align-items-center">
+            <span class="me-2">状态：</span>
+            {% if experiment.status == 'pending' %}
+                <span class="badge bg-secondary fs-6">
+                    <i class="fas fa-clock me-1"></i>待启动
+                </span>
+            {% elif experiment.status == 'queued' %}
+                <span class="badge bg-warning fs-6">
+                    <i class="fas fa-hourglass-half me-1"></i>排队
+                </span>
+            {% elif experiment.status == 'running' %}
+                <span class="badge bg-primary fs-6">
+                    <i class="fas fa-play me-1"></i>运行
+                </span>
+            {% elif experiment.status == 'interrupted' %}
+                <span class="badge bg-warning fs-6">
+                    <i class="fas fa-hand-paper me-1"></i>中断
+                </span>
+            {% elif experiment.status == 'error' %}
+                <span class="badge bg-danger fs-6">
+                    <i class="fas fa-exclamation-triangle me-1"></i>错误
+                </span>
+            {% elif experiment.status == 'completed' %}
+                <span class="badge bg-success fs-6">
+                    <i class="fas fa-check me-1"></i>完成
+                </span>
+            {% else %}
+                <span class="badge bg-light text-dark fs-6">未知状态</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="btn-group">
+        {% if experiment.status == 'pending' %}
+            <a href="{% url 'experiments:edit' experiment.pk %}" class="btn btn-outline-primary">
+                <i class="fas fa-edit me-1"></i>编辑
+            </a>
+            <form method="post" action="{% url 'experiments:start' experiment.pk %}" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-success" onclick="return confirm('确认启动实验？')">
+                    <i class="fas fa-play me-1"></i>启动实验
+                </button>
+            </form>
+            <button id="queueExperimentBtn" class="btn btn-warning" 
+                    onclick="queueExperiment({{ experiment.pk }})"
+                    title="如果GPU繁忙，可以加入队列等待自动启动">
+                <i class="fas fa-hourglass-half me-1"></i>加入队列
+            </button>
+        {% elif experiment.status == 'queued' %}
+            <form method="post" action="{% url 'experiments:start' experiment.pk %}" style="display: inline;">
+                {% csrf_token %}
+                <input type="hidden" name="force_start" value="true">
+                <button type="submit" class="btn btn-warning" onclick="return confirm('确认强制启动实验？这将忽略GPU状态检查。')">
+                    <i class="fas fa-bolt me-1"></i>强制启动
+                </button>
+            </form>
+        {% elif experiment.status == 'running' %}
+            <button id="refreshStatusBtn" class="btn btn-outline-info">
+                <i class="fas fa-sync-alt me-1"></i>刷新状态
+            </button>
+            <form method="post" action="{% url 'experiments:stop' experiment.pk %}" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-warning" onclick="return confirm('确认停止实验？')">
+                    <i class="fas fa-stop me-1"></i>停止实验
+                </button>
+            </form>
+        {% elif experiment.status == 'error' or experiment.status == 'interrupted' %}
+            <form method="post" action="{% url 'experiments:restart' experiment.pk %}" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-info" onclick="return confirm('确认重新启动实验？')">
+                    <i class="fas fa-redo me-1"></i>重新启动
+                </button>
+            </form>
+        {% endif %}
+        
+        <a href="{% url 'experiments:delete' experiment.pk %}" class="btn btn-outline-danger">
+            <i class="fas fa-trash me-1"></i>删除
+        </a>
+    </div>
+</div>
+
+<!-- 时间信息卡片 -->
+{% if experiment.created_at or experiment.started_at or experiment.completed_at %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h5><i class="fas fa-clock me-2"></i>时间信息</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            {% if experiment.created_at %}
+            <div class="col-md-4">
+                <div class="text-center">
+                    <i class="fas fa-plus-circle text-info fa-2x mb-2"></i>
+                    <h6>创建时间</h6>
+                    <p class="text-muted mb-0">{{ experiment.created_at|date:"Y-m-d H:i:s" }}</p>
+                </div>
+            </div>
+            {% endif %}
+            {% if experiment.started_at %}
+            <div class="col-md-4">
+                <div class="text-center">
+                    <i class="fas fa-play-circle text-success fa-2x mb-2"></i>
+                    <h6>启动时间</h6>
+                    <p class="text-muted mb-0">{{ experiment.started_at|date:"Y-m-d H:i:s" }}</p>
+                </div>
+            </div>
+            {% endif %}
+            {% if experiment.completed_at %}
+            <div class="col-md-4">
+                <div class="text-center">
+                    <i class="fas fa-check-circle text-primary fa-2x mb-2"></i>
+                    <h6>完成时间</h6>
+                    <p class="text-muted mb-0">{{ experiment.completed_at|date:"Y-m-d H:i:s" }}</p>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% if experiment.started_at and experiment.completed_at %}
+        <div class="text-center mt-3 pt-3 border-top">
+            <h6>运行时长</h6>
+            <p class="text-muted mb-0">
+                {{ experiment.started_at|timesince:experiment.completed_at }}
+            </p>
+        </div>
+        {% elif experiment.started_at and experiment.status == 'running' %}
+        <div class="text-center mt-3 pt-3 border-top">
+            <h6>已运行时长</h6>
+            <p class="text-muted mb-0">
+                {{ experiment.started_at|timesince }}
+            </p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<!-- 实时监控面板（仅在运行时显示） -->
+{% if experiment.status == 'running' %}
+<div class="card mb-4" id="realTimeMonitor">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5><i class="fas fa-chart-line me-2"></i>实时监控</h5>
+        <small class="text-muted">每1秒自动更新</small>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <div class="d-flex align-items-center justify-content-between p-3 bg-light rounded">
+                    <div>
+                        <h6 class="mb-1">进程状态</h6>
+                        <span id="processStatus" class="badge bg-primary">
+                            <i class="fas fa-spinner fa-spin me-1"></i>检查中...
+                        </span>
+                    </div>
+                    <div class="text-end">
+                        <small class="text-muted">PID: <span id="processPid">-</span></small><br>
+                        <small class="text-muted">运行时间: <span id="runningTime">-</span></small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="d-flex align-items-center justify-content-between p-3 bg-light rounded">
+                    <div>
+                        <h6 class="mb-1">最新日志</h6>
+                        <small id="latestLog" class="text-muted">等待日志...</small>
+                    </div>
+                    <div>
+                        <button id="toggleAutoScroll" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-arrow-down me-1"></i>自动滚动
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 错误信息显示 -->
+        <div id="errorAlert" class="alert alert-danger mt-3" style="display: none;">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            <span id="errorMessage"></span>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="row">
+    <!-- 实验配置信息 -->
+    <div class="col-lg-8">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5><i class="fas fa-cog me-2"></i>实验配置</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <h6 class="text-muted mb-2"><i class="fas fa-cube me-1"></i>模型信息</h6>
+                            <div class="d-flex align-items-center mb-2">
+                                <span class="me-2">任务类型：</span>
+                                <span class="badge bg-info">{{ experiment.get_task_type_display }}</span>
+                            </div>
+                            <div class="mb-2">
+                                <span class="me-2">模型配置：</span>
+                                {% if experiment.model_configs %}
+                                    <code class="bg-light px-2 py-1 rounded">{{ experiment.model_configs }}</code>
+                                {% else %}
+                                    <span class="text-muted">未配置</span>
+                                {% endif %}
+                            </div>
+                            {% if experiment.setting_config %}
+                            <div class="mb-2">
+                                <span class="me-2">参数配置：</span>
+                                <code class="bg-light px-2 py-1 rounded">{{ experiment.setting_config }}</code>
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            <h6 class="text-muted mb-2"><i class="fas fa-database me-1"></i>数据集信息</h6>
+                            <div class="d-flex align-items-center mb-1">
+                                <a href="{% url 'datasets:detail' experiment.dataset %}" class="text-decoration-none me-2">
+                                    <i class="fas fa-external-link-alt me-1"></i>{{ experiment.dataset }}
+                                </a>
+                                {% if experiment.dataset_info %}
+                                    <span class="badge bg-secondary">{{ experiment.dataset_info.nc }}类</span>
+                                {% endif %}
+                            </div>
+                            {% if experiment.dataset_info %}
+                                <small class="text-muted d-block">{{ experiment.dataset_info.description|default:"" }}</small>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            <h6 class="text-muted mb-2"><i class="fas fa-user me-1"></i>其他信息</h6>
+                            <div class="mb-1">
+                                <span class="me-2">创建用户：</span>
+                                <span class="badge bg-outline-primary">{{ experiment.user.username }}</span>
+                            </div>
+                            <div class="mb-1">
+                                <span class="me-2">设备：</span>
+                                <code class="bg-light px-2 py-1 rounded">{{ experiment.device }}</code>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <h6 class="text-muted mb-2"><i class="fas fa-sliders-h me-1"></i>训练参数</h6>
+                            <div class="row g-3">
+                                <div class="col-6">
+                                    <div class="text-center p-2 bg-light rounded param-card">
+                                        <div class="h5 mb-0 text-primary">{{ experiment.epochs }}</div>
+                                        <small class="text-muted">训练轮数</small>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="text-center p-2 bg-light rounded param-card">
+                                        <div class="h5 mb-0 text-success">{{ experiment.batch_size }}</div>
+                                        <small class="text-muted">批量大小</small>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="text-center p-2 bg-light rounded param-card">
+                                        <div class="h5 mb-0 text-info">{{ experiment.get_scale_display }}</div>
+                                        <small class="text-muted">模型尺寸</small>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="text-center p-2 bg-light rounded param-card">
+                                        <div class="h5 mb-0 text-warning">{{ experiment.group|default:"-" }}</div>
+                                        <small class="text-muted">分组</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 生成的命令 -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-terminal me-2"></i>训练命令</h5>
+                <button class="btn btn-sm btn-outline-secondary" onclick="copyCommand()">
+                    <i class="fas fa-copy me-1"></i>复制命令
+                </button>
+            </div>
+            <div class="card-body">
+                {% if experiment.command %}
+                <div class="bg-dark text-light p-3 rounded position-relative">
+                    <code id="command-text" style="color: #00ff00; font-family: 'Courier New', monospace; word-break: break-all;">{{ experiment.command }}</code>
+                </div>
+                <small class="text-muted mt-2 d-block">
+                    <i class="fas fa-info-circle me-1"></i>此命令在实验启动时自动执行
+                </small>
+                {% else %}
+                <div class="text-center py-4">
+                    <i class="fas fa-exclamation-triangle text-warning fa-2x mb-2"></i>
+                    <div class="text-muted">命令尚未生成</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- 侧边栏：状态和统计 -->
+    <div class="col-lg-4">
+        <!-- 当前状态卡片 -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5><i class="fas fa-info-circle me-2"></i>实验状态</h5>
+            </div>
+            <div class="card-body text-center">
+                {% if experiment.status == 'pending' %}
+                    <i class="fas fa-clock text-secondary fa-3x mb-3"></i>
+                    <h5 class="text-secondary">待启动</h5>
+                    <p class="text-muted">实验已创建，等待启动</p>
+                {% elif experiment.status == 'queued' %}
+                    <i class="fas fa-hourglass-half text-warning fa-3x mb-3"></i>
+                    <h5 class="text-warning">排队中</h5>
+                    <p class="text-muted">实验在队列中等待执行</p>
+                {% elif experiment.status == 'running' %}
+                    <i class="fas fa-play text-primary fa-3x mb-3 pulse-animation"></i>
+                    <h5 class="text-primary">运行中</h5>
+                    <p class="text-muted">实验正在进行训练</p>
+                    <div class="progress mt-3">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%"></div>
+                    </div>
+                {% elif experiment.status == 'error' %}
+                    <i class="fas fa-exclamation-triangle text-danger fa-3x mb-3"></i>
+                    <h5 class="text-danger">错误</h5>
+                    <p class="text-muted">实验执行过程中发生错误</p>
+                    {% if experiment.error_message %}
+                    <div class="alert alert-danger text-start mt-3">
+                        <small>{{ experiment.error_message|truncatewords:20 }}</small>
+                    </div>
+                    {% endif %}
+                {% elif experiment.status == 'completed' %}
+                    <i class="fas fa-check-circle text-success fa-3x mb-3"></i>
+                    <h5 class="text-success">已完成</h5>
+                    <p class="text-muted">实验训练已成功完成</p>
+                {% else %}
+                    <i class="fas fa-question-circle text-muted fa-3x mb-3"></i>
+                    <h5 class="text-muted">未知状态</h5>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- 输出配置卡片 -->
+        {% if experiment.project_name or experiment.experiment_name or experiment.save_dir %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5><i class="fas fa-folder-open me-2"></i>输出配置</h5>
+            </div>
+            <div class="card-body">
+                {% if experiment.project_name %}
+                <div class="mb-2">
+                    <small class="text-muted">项目名称：</small>
+                    <div><code>{{ experiment.project_name }}</code></div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- 结果文件卡片 -->
+        {% if experiment.log_file or experiment.result_file %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5><i class="fas fa-file-alt me-2"></i>结果文件</h5>
+            </div>
+            <div class="card-body">
+                {% if experiment.log_file %}
+                <div class="mb-2">
+                    <a href="{{ experiment.log_file }}" class="btn btn-sm btn-outline-primary w-100">
+                        <i class="fas fa-file-text me-1"></i>查看日志
+                    </a>
+                </div>
+                {% endif %}
+                {% if experiment.result_file %}
+                <div class="mb-2">
+                    <a href="{{ experiment.result_file }}" class="btn btn-sm btn-outline-success w-100">
+                        <i class="fas fa-download me-1"></i>下载结果
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- 实验日志区域 -->
+{% if experiment.status != 'pending' %}
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-list-alt me-2"></i>实验日志</h5>
+                <div class="btn-group btn-group-sm">
+                    {% if experiment.status == 'running' %}
+                    <button id="pauseAutoRefresh" class="btn btn-outline-warning">
+                        <i class="fas fa-pause me-1"></i>暂停自动刷新
+                    </button>
+                    {% endif %}
+                    <button class="btn btn-outline-primary" onclick="refreshLogs()">
+                        <i class="fas fa-sync-alt me-1"></i>手动刷新
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                {% if logs %}
+                <pre id="logContainer" class="log-terminal" style="margin: 0; padding: 8px; text-align: left !important; white-space: pre-wrap;">{% for log in logs %}<div class="log-line" data-log-id="{{ log.id }}">{{ log.message }}</div>{% endfor %}</pre>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-file-alt text-muted fa-3x mb-3"></i>
+                    <h6 class="text-muted">暂无日志记录</h6>
+                    {% if experiment.status == 'running' %}
+                    <p class="text-muted">日志将在实验开始运行后显示</p>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+// 加入队列功能
+function queueExperiment(experimentId) {
+    if (!confirm('确认将实验加入队列？实验将在GPU可用时自动启动。')) {
+        return;
+    }
+    
+    const button = document.getElementById('queueExperimentBtn');
+    const originalContent = button.innerHTML;
+    
+    // 显示加载状态
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>加入队列中...';
+    
+    fetch(`/experiments/${experimentId}/queue/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // 加入队列成功，刷新页面显示新状态
+            location.reload();
+        } else {
+            alert('加入队列失败: ' + data.error);
+            button.disabled = false;
+            button.innerHTML = originalContent;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('加入队列时发生错误');
+        button.disabled = false;
+        button.innerHTML = originalContent;
+    });
+}
+
+// 复制命令功能
+function copyCommand() {
+    const commandText = document.getElementById('command-text');
+    if (commandText) {
+        const textArea = document.createElement('textarea');
+        textArea.value = commandText.textContent;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        
+        // 显示复制成功提示
+        const button = event.target.closest('button');
+        const originalText = button.innerHTML;
+        button.innerHTML = '<i class="fas fa-check me-1"></i>已复制';
+        button.classList.add('btn-success');
+        button.classList.remove('btn-outline-secondary');
+        
+        setTimeout(() => {
+            button.innerHTML = originalText;
+            button.classList.remove('btn-success');
+            button.classList.add('btn-outline-secondary');
+        }, 2000);
+    }
+}
+
+// 刷新日志功能
+function refreshLogs() {
+    {% if experiment.status == 'running' %}
+    // 运行状态下刷新所有日志而不重新加载页面
+    refreshAllLogs();
+    {% else %}
+    // 非运行状态下重新加载页面
+    location.reload();
+    {% endif %}
+}
+
+// 实时监控功能
+let autoRefreshEnabled = true;
+let autoScrollEnabled = true;
+let lastLogId = 0;
+
+// 获取最后一条日志的ID
+function getLastLogId() {
+    const logLines = document.querySelectorAll('.log-line[data-log-id]');
+    if (logLines.length > 0) {
+        const lastLine = logLines[logLines.length - 1];
+        return parseInt(lastLine.getAttribute('data-log-id'));
+    }
+    return 0;
+}
+
+// 格式化运行时间
+function formatRunningTime(seconds) {
+    if (seconds < 60) {
+        return Math.floor(seconds) + '秒';
+    } else if (seconds < 3600) {
+        return Math.floor(seconds / 60) + '分' + Math.floor(seconds % 60) + '秒';
+    } else {
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        return hours + '小时' + minutes + '分钟';
+    }
+}
+
+// 更新实验状态
+function updateExperimentStatus() {
+    if (!autoRefreshEnabled) return;
+    
+    const currentLastId = getLastLogId();
+    
+    fetch(`/experiments/{{ experiment.pk }}/status-api/`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // 更新进程状态
+                updateProcessStatus(data.process_status);
+                
+                // 更新实验状态
+                updateExperimentInfo(data.experiment);
+                
+                // 更新日志（但这里只是更新状态显示，不是添加新日志）
+                if (data.recent_logs && data.recent_logs.length > 0) {
+                    const latestLogElement = document.getElementById('latestLog');
+                    if (latestLogElement) {
+                        const latestLog = data.recent_logs[0];
+                        latestLogElement.textContent = latestLog.message.substring(0, 50) + (latestLog.message.length > 50 ? '...' : '');
+                    }
+                }
+                
+                // 单独获取新日志
+                fetchNewLogs(currentLastId);
+                
+                // 隐藏错误提示
+                document.getElementById('errorAlert').style.display = 'none';
+            } else {
+                showError('获取状态失败: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('状态更新错误:', error);
+            showError('网络连接错误');
+        });
+}
+
+// 获取新日志
+function fetchNewLogs(sinceId) {
+    if (sinceId === 0) return; // 如果没有现有日志，不执行增量更新
+    
+    fetch(`/experiments/{{ experiment.pk }}/logs-api/?since_id=${sinceId}&per_page=100`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.logs.length > 0) {
+                const logContainer = document.getElementById('logContainer');
+                if (logContainer) {
+                    let hasNewLogs = false;
+                    
+                    data.logs.forEach(log => {
+                        hasNewLogs = true;
+                        const logLine = document.createElement('div');
+                        logLine.className = 'log-line';
+                        logLine.setAttribute('data-log-id', log.id);
+                        logLine.textContent = log.message;
+                        logContainer.appendChild(logLine);
+                    });
+                    
+                    // 自动滚动到底部
+                    if (hasNewLogs && autoScrollEnabled) {
+                        logContainer.scrollTop = logContainer.scrollHeight;
+                    }
+                }
+            }
+        })
+        .catch(error => {
+            console.error('获取新日志失败:', error);
+        });
+}
+
+// 更新进程状态显示
+function updateProcessStatus(processStatus) {
+    const statusElement = document.getElementById('processStatus');
+    const pidElement = document.getElementById('processPid');
+    const timeElement = document.getElementById('runningTime');
+    
+    if (!statusElement) return;
+    
+    if (processStatus.status === 'running') {
+        statusElement.className = 'badge bg-success';
+        statusElement.innerHTML = '<i class="fas fa-play me-1"></i>运行中';
+        pidElement.textContent = processStatus.pid || '-';
+        timeElement.textContent = formatRunningTime(processStatus.running_time || 0);
+    } else if (processStatus.status === 'finished') {
+        statusElement.className = 'badge bg-info';
+        statusElement.innerHTML = '<i class="fas fa-check me-1"></i>已完成';
+        pidElement.textContent = '-';
+        timeElement.textContent = formatRunningTime((processStatus.end_time - processStatus.start_time) || 0);
+    } else {
+        statusElement.className = 'badge bg-warning';
+        statusElement.innerHTML = '<i class="fas fa-question me-1"></i>' + processStatus.status;
+        pidElement.textContent = '-';
+        timeElement.textContent = '-';
+    }
+}
+
+// 更新实验信息
+function updateExperimentInfo(experiment) {
+    // 如果实验状态变化，刷新页面
+    const currentStatus = '{{ experiment.status }}';
+    if (experiment.status !== currentStatus && experiment.status !== 'running') {
+        // 状态从运行变为其他状态（完成、错误、中断），刷新页面
+        location.reload();
+    }
+}
+
+// 更新日志显示
+function updateLogs(newLogs) {
+    if (!newLogs || newLogs.length === 0) return;
+    
+    const logContainer = document.getElementById('logContainer');
+    if (!logContainer) return;
+    
+    // 获取最新的日志条目用于状态显示
+    const latestLogElement = document.getElementById('latestLog');
+    if (latestLogElement && newLogs.length > 0) {
+        const latestLog = newLogs[0];
+        latestLogElement.textContent = latestLog.message.substring(0, 50) + (latestLog.message.length > 50 ? '...' : '');
+    }
+    
+    // 实时添加新日志（只在运行状态下）
+    const currentLastId = getLastLogId();
+    let hasNewLogs = false;
+    
+    newLogs.forEach(log => {
+        if (log.id > currentLastId) {
+            hasNewLogs = true;
+            const logLine = document.createElement('div');
+            logLine.className = 'log-line';
+            logLine.setAttribute('data-log-id', log.id);
+            // 直接显示原始日志内容，不添加时间戳和级别标签
+            logLine.textContent = log.message;
+            logContainer.appendChild(logLine);
+        }
+    });
+    
+    // 自动滚动到底部
+    if (hasNewLogs && autoScrollEnabled) {
+        logContainer.scrollTop = logContainer.scrollHeight;
+    }
+}
+
+// 刷新所有日志
+function refreshAllLogs() {
+    const logContainer = document.getElementById('logContainer');
+    if (!logContainer) return;
+    
+    fetch(`/experiments/{{ experiment.pk }}/logs-api/?per_page=1000`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // 清空当前日志
+                logContainer.innerHTML = '';
+                
+                // 添加所有日志
+                data.logs.forEach(log => {
+                    const logLine = document.createElement('div');
+                    logLine.className = 'log-line';
+                    logLine.setAttribute('data-log-id', log.id);
+                    logLine.textContent = log.message;
+                    logContainer.appendChild(logLine);
+                });
+                
+                // 滚动到底部
+                if (autoScrollEnabled) {
+                    logContainer.scrollTop = logContainer.scrollHeight;
+                }
+                
+                // 更新lastLogId
+                lastLogId = getLastLogId();
+            }
+        })
+        .catch(error => {
+            console.error('刷新日志失败:', error);
+        });
+}
+
+// 显示错误信息
+function showError(message) {
+    const errorAlert = document.getElementById('errorAlert');
+    const errorMessage = document.getElementById('errorMessage');
+    if (errorAlert && errorMessage) {
+        errorMessage.textContent = message;
+        errorAlert.style.display = 'block';
+    }
+}
+
+// 页面加载完成后启动监控
+document.addEventListener('DOMContentLoaded', function() {
+    // 设置最后日志ID
+    lastLogId = getLastLogId();
+    
+    // 绑定控制按钮事件
+    const pauseBtn = document.getElementById('pauseAutoRefresh');
+    if (pauseBtn) {
+        pauseBtn.addEventListener('click', function() {
+            autoRefreshEnabled = !autoRefreshEnabled;
+            if (autoRefreshEnabled) {
+                this.innerHTML = '<i class="fas fa-pause me-1"></i>暂停自动刷新';
+                this.className = 'btn btn-outline-warning';
+            } else {
+                this.innerHTML = '<i class="fas fa-play me-1"></i>恢复自动刷新';
+                this.className = 'btn btn-outline-success';
+            }
+        });
+    }
+    
+    const scrollBtn = document.getElementById('toggleAutoScroll');
+    if (scrollBtn) {
+        scrollBtn.addEventListener('click', function() {
+            autoScrollEnabled = !autoScrollEnabled;
+            if (autoScrollEnabled) {
+                this.innerHTML = '<i class="fas fa-arrow-down me-1"></i>自动滚动';
+                this.className = 'btn btn-sm btn-outline-primary';
+            } else {
+                this.innerHTML = '<i class="fas fa-hand-paper me-1"></i>手动滚动';
+                this.className = 'btn btn-sm btn-outline-secondary';
+            }
+        });
+    }
+    
+    const refreshBtn = document.getElementById('refreshStatusBtn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', updateExperimentStatus);
+    }
+});
+
+// 如果实验正在运行，启动自动监控
+{% if experiment.status == 'running' %}
+// 从配置获取更新间隔
+const updateInterval = {{ api_config.STATUS_UPDATE_INTERVAL|default:1000 }};
+
+// 立即执行一次状态更新
+setTimeout(updateExperimentStatus, updateInterval);
+
+// 设置定时更新
+const monitorInterval = setInterval(function() {
+    if (autoRefreshEnabled) {
+        updateExperimentStatus();
+    }
+}, updateInterval);
+
+// 页面卸载时清理定时器
+window.addEventListener('beforeunload', function() {
+    if (monitorInterval) {
+        clearInterval(monitorInterval);
+    }
+});
+{% else %}
+// 非运行状态下，每30秒检查一次状态变化
+setInterval(function() {
+    fetch(`/experiments/{{ experiment.pk }}/status-api/`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.experiment.status !== '{{ experiment.status }}') {
+                location.reload(); // 状态发生变化时刷新页面
+            }
+        })
+        .catch(error => console.error('状态检查错误:', error));
+}, 30000);
+{% endif %}
+</script>
+
+<style>
+/* 日志终端样式 - 使用pre标签 */
+.log-terminal {
+    background-color: rgb(20, 23, 41) !important;
+    color: #ffffff !important;
+    font-family: 'Courier New', 'Consolas', 'Monaco', monospace !important;
+    font-size: 14px;
+    line-height: 1.3;
+    max-height: 500px;
+    overflow-y: auto;
+    border-radius: 0;
+    margin: 0 !important;
+    padding: 8px !important;
+    text-align: left !important;
+    white-space: pre-wrap !important;
+    word-wrap: break-word !important;
+    display: block !important;
+    width: 100% !important;
+}
+
+.log-line {
+    margin-bottom: 2px;
+    display: block;
+    text-align: left !important;
+}
+
+/* 日志级别样式 */
+.log-level-error {
+    color: #ff6b6b !important;
+    font-weight: bold;
+}
+
+.log-level-warning {
+    color: #ffa726 !important;
+    font-weight: bold;
+}
+
+.log-level-info {
+    color: #42a5f5 !important;
+    font-weight: bold;
+}
+
+.log-level-debug {
+    color: #66bb6a !important;
+    font-weight: bold;
+}
+
+/* 滚动条样式 */
+.log-terminal::-webkit-scrollbar {
+    width: 8px;
+}
+
+.log-terminal::-webkit-scrollbar-track {
+    background: rgb(20, 23, 41);
+}
+
+.log-terminal::-webkit-scrollbar-thumb {
+    background: #555;
+    border-radius: 4px;
+}
+
+.log-terminal::-webkit-scrollbar-thumb:hover {
+    background: #777;
+}
+
+/* 其他样式 */
+.progress-bar-striped.progress-bar-animated {
+    animation: progress-bar-stripes 1s linear infinite;
+}
+
+.card-header h5 {
+    margin-bottom: 0;
+}
+
+.badge.fs-6 {
+    font-size: 0.875rem !important;
+}
+
+/* 状态图标动画 */
+.pulse-animation {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+/* 参数卡片悬停效果 */
+.param-card:hover {
+    background-color: #e9ecef !important;
+    transform: translateY(-2px);
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.param-card {
+    transition: all 0.2s ease;
+}
+</style>
+{% endblock %}

@@ -1,0 +1,161 @@
+{% extends 'base.html' %}
+
+{% block title %}GPU使用冲突 - {{ experiment.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <h4 class="mb-0">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        GPU使用冲突检测
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-warning">
+                        <h5 class="alert-heading">
+                            <i class="fas fa-microchip me-2"></i>
+                            检测到GPU显存使用率过高
+                        </h5>
+                        <p class="mb-0">{{ gpu_check.message }}</p>
+                    </div>
+
+                    <!-- 实验信息 -->
+                    <div class="mb-4">
+                        <h6><i class="fas fa-flask me-2"></i>实验信息</h6>
+                        <div class="bg-light p-3 rounded">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <strong>实验名称：</strong>{{ experiment.name }}
+                                </div>
+                                <div class="col-md-6">
+                                    <strong>请求设备：</strong><code>{{ experiment.device }}</code>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- GPU状态详情 -->
+                    {% if gpu_status %}
+                    <div class="mb-4">
+                        <h6><i class="fas fa-chart-bar me-2"></i>GPU状态详情</h6>
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>GPU</th>
+                                        <th>显存使用率</th>
+                                        <th>已使用显存</th>
+                                        <th>总显存</th>
+                                        <th>状态</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for gpu_idx, status in gpu_status.items %}
+                                    <tr class="{% if gpu_idx in busy_gpus %}table-danger{% else %}table-success{% endif %}">
+                                        <td><strong>GPU {{ gpu_idx }}</strong></td>
+                                        <td>
+                                            <div class="d-flex align-items-center">
+                                                <div class="progress flex-grow-1 me-2" style="height: 20px;">
+                                                    <div class="progress-bar {% if status.memory_used_percent > 20 %}bg-danger{% else %}bg-success{% endif %}" 
+                                                         style="width: {{ status.memory_used_percent }}%">
+                                                        {{ status.memory_used_percent }}%
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td>{{ status.memory_used }} MB</td>
+                                        <td>{{ status.memory_total }} MB</td>
+                                        <td>
+                                            {% if gpu_idx in busy_gpus %}
+                                                <span class="badge bg-danger">繁忙</span>
+                                            {% else %}
+                                                <span class="badge bg-success">空闲</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- 选择操作 -->
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <div class="card h-100 border-info">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-hourglass-half text-info fa-3x mb-3"></i>
+                                    <h5 class="card-title">加入排队</h5>
+                                    <p class="card-text text-muted">
+                                        等待GPU空闲后自动启动实验。推荐选择此选项以避免资源冲突。
+                                    </p>
+                                    <form method="post" action="{% url 'experiments:start' experiment.pk %}">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="force_start" value="true">
+                                        <button type="submit" class="btn btn-info">
+                                            <i class="fas fa-clock me-2"></i>加入排队
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <div class="card h-100 border-warning">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-bolt text-warning fa-3x mb-3"></i>
+                                    <h5 class="card-title">强制启动</h5>
+                                    <p class="card-text text-muted">
+                                        立即启动实验，可能导致GPU显存不足或性能下降。
+                                    </p>
+                                    <form method="post" action="{% url 'experiments:start' experiment.pk %}">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="force_start" value="true">
+                                        <button type="submit" class="btn btn-warning" 
+                                                onclick="return confirm('确认强制启动？这可能导致GPU资源不足！')">
+                                            <i class="fas fa-bolt me-2"></i>强制启动
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 其他选项 -->
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <div class="text-center">
+                                <a href="{% url 'experiments:edit' experiment.pk %}" class="btn btn-outline-secondary me-2">
+                                    <i class="fas fa-edit me-1"></i>修改实验配置
+                                </a>
+                                <a href="{% url 'experiments:detail' experiment.pk %}" class="btn btn-outline-secondary">
+                                    <i class="fas fa-arrow-left me-1"></i>返回实验详情
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 说明信息 -->
+                    <div class="mt-4">
+                        <div class="alert alert-info">
+                            <h6 class="alert-heading">
+                                <i class="fas fa-info-circle me-2"></i>说明
+                            </h6>
+                            <ul class="mb-0">
+                                <li>显存使用率超过20%的GPU被认为是繁忙状态</li>
+                                <li>建议选择"加入排队"以获得最佳性能</li>
+                                <li>强制启动可能导致实验运行缓慢或失败</li>
+                                <li>您可以修改实验配置选择其他空闲的GPU</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

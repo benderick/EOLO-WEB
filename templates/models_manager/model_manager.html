@@ -1,0 +1,2267 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}模型配置管理{% endblock %}
+
+{% block extra_css %}
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+<!-- Prism.js CSS for syntax highlighting - 使用深色主题 -->
+<link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet">
+<!-- 强制刷新样式缓存 v2.0 -->
+<style>
+    /* 新版本UI样式 - 2025年8月1日更新 */
+    .model-manager-container {
+        height: calc(100vh - 120px);
+        display: flex;
+        gap: 20px;
+        padding: 0;
+    }
+    
+    .file-tree-panel {
+        width: 380px;
+        min-width: 300px;
+        max-width: 500px;
+        background: #ffffff;
+        border: 1px solid #e1e5e9;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        display: flex;
+        flex-direction: column;
+        resize: horizontal;
+        overflow: hidden;
+    }
+    
+    .file-editor-panel {
+        flex: 1;
+        background: #ffffff;
+        border: 1px solid #e1e5e9;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        display: flex;
+        flex-direction: column;
+        min-width: 400px;
+    }
+    
+    .panel-header {
+        padding: 16px 24px;
+        border-bottom: 1px solid #e1e5e9;
+        background: linear-gradient(135deg, #f8fafb 0%, #f1f5f9 100%);
+        border-radius: 12px 12px 0 0;
+        font-weight: 600;
+        font-size: 15px;
+        color: #1e293b;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .panel-header i {
+        color: #3b82f6;
+        margin-right: 8px;
+    }
+    
+    .panel-content {
+        flex: 1;
+        overflow: auto;
+        padding: 20px 24px;
+        background: #fafbfc;
+    }
+    
+    .tree-section {
+        margin-bottom: 30px;
+        background: white;
+        border-radius: 10px;
+        padding: 16px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        border: 1px solid #f1f5f9;
+    }
+    
+    .tree-section h4 {
+        margin: 0 0 16px 0;
+        color: #1e293b;
+        font-size: 15px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding-bottom: 8px;
+        border-bottom: 2px solid #f1f5f9;
+    }
+    
+    .tree-section h4 i {
+        color: #3b82f6;
+        font-size: 16px;
+    }
+    
+    .file-tree {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+    
+    .tree-item {
+        margin: 3px 0;
+    }
+    
+    .tree-node {
+        padding: 10px 12px;
+        border-radius: 8px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        transition: all 0.2s ease;
+        font-size: 14px;
+        color: #475569;
+        border: 1px solid transparent;
+    }
+    
+    .tree-node:hover {
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+        border-color: #e2e8f0;
+        transform: translateX(2px);
+    }
+    
+    .tree-node.active {
+        background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+        color: #1d4ed8;
+        border-color: #3b82f6;
+        font-weight: 500;
+    }
+    
+    .tree-node i {
+        width: 16px;
+        font-size: 14px;
+        text-align: center;
+        flex-shrink: 0;
+    }
+    
+    .tree-node.folder i {
+        color: #f59e0b;
+    }
+    
+    .tree-node.file i {
+        color: #10b981;
+    }
+    
+    .tree-children {
+        margin-left: 24px;
+        padding-left: 12px;
+        border-left: 2px solid #f1f5f9;
+        margin-top: 4px;
+        transition: all 0.3s ease;
+    }
+    
+    .tree-children.collapsed {
+        display: none;
+    }
+    
+    .folder-toggle {
+        width: 16px;
+        height: 16px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 6px;
+        cursor: pointer;
+        border-radius: 2px;
+        transition: all 0.2s ease;
+        font-size: 10px;
+    }
+    
+    .folder-toggle:hover {
+        background: rgba(59, 130, 246, 0.1);
+        color: #3b82f6;
+    }
+    
+    .folder-toggle.expanded {
+        transform: rotate(90deg);
+    }
+    
+    .folder-toggle.collapsed {
+        transform: rotate(0deg);
+    }
+    
+    .tree-node.folder {
+        position: relative;
+    }
+    
+    .tree-node.folder .folder-icon {
+        transition: all 0.2s ease;
+    }
+    
+    .tree-node.folder.expanded .folder-icon {
+        color: #f59e0b;
+    }
+    
+    .tree-node.folder.collapsed .folder-icon {
+        color: #6b7280;
+    }
+    
+    .editor-header {
+        padding: 16px 24px;
+        border-bottom: 1px solid #e1e5e9;
+        background: linear-gradient(135deg, #f8fafb 0%, #f1f5f9 100%);
+        font-size: 14px;
+        color: #475569;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-weight: 500;
+    }
+    
+    .editor-content {
+        flex: 1;
+        position: relative;
+        background: #2d3748;
+        overflow: hidden;
+        min-height: 0;
+    }
+    
+    .code-editor {
+        width: 100%;
+        height: 100%;
+        border: none;
+        outline: none;
+        resize: none;
+        font-family: 'JetBrains Mono', 'Fira Code', 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        font-size: 14px;
+        line-height: 1.6;
+        padding: 24px;
+        background: #2d3748;
+        color: #e2e8f0;
+        transition: all 0.2s ease;
+        box-sizing: border-box;
+        overflow: auto;
+    }
+    
+    .code-editor:focus {
+        background: #2d3748;
+        box-shadow: inset 0 0 0 2px #4a5568;
+    }
+    
+    /* 只读模式语法高亮容器 - 简洁优雅 */
+    .syntax-highlighter-readonly {
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        background: #2d3748;
+        cursor: text;
+        transition: all 0.2s ease;
+    }
+    
+    .syntax-highlighter-readonly:hover {
+        box-shadow: inset 0 0 0 1px #4a5568;
+    }
+    
+    .syntax-highlighter-readonly[data-editable="true"]:hover {
+        box-shadow: inset 0 0 0 2px #3b82f6;
+    }
+    
+    .syntax-highlighter-readonly pre {
+        margin: 0 !important;
+        padding: 24px !important;
+        background: transparent !important;
+        border: none !important;
+        font-family: 'JetBrains Mono', 'Fira Code', 'Monaco', 'Menlo', 'Ubuntu Mono', monospace !important;
+        font-size: 14px !important;
+        line-height: 1.6 !important;
+        white-space: pre-wrap !important;
+        word-break: break-word !important;
+        color: #e2e8f0 !important;
+        overflow: visible !important;
+    }
+    
+    .syntax-highlighter-readonly code {
+        font-family: inherit !important;
+        font-size: inherit !important;
+        line-height: inherit !important;
+        background: transparent !important;
+        color: inherit !important;
+        white-space: inherit !important;
+        word-break: inherit !important;
+        display: block !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        border: none !important;
+    }
+    
+    /* 编辑提示样式 */
+    .edit-hint {
+        background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+        color: white;
+        padding: 8px 16px;
+        border-radius: 6px;
+        margin-bottom: 10px;
+        font-size: 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        animation: slideIn 0.3s ease;
+    }
+    
+    @keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    /* textarea透明层 - 确保完全覆盖且保持滚动能力 */
+    .syntax-highlighter textarea {
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        margin: 0 !important;
+        padding: 24px !important;
+        border: none !important;
+        outline: none !important;
+        background: transparent !important;
+        color: transparent !important;
+        caret-color: #ffffff !important;
+        resize: none !important;
+        box-sizing: border-box !important;
+        font-family: 'JetBrains Mono', 'Fira Code', 'Monaco', 'Menlo', 'Ubuntu Mono', monospace !important;
+        font-size: 14px !important;
+        line-height: 1.6 !important;
+        white-space: pre-wrap !important;
+        word-break: break-word !important;
+        letter-spacing: normal !important;
+        word-spacing: normal !important;
+        text-indent: 0px !important;
+        tab-size: 4 !important;
+        z-index: 2 !important;
+        overflow: auto !important;
+        /* 保持滚动条可见以便用户操作 */
+    }
+    
+    .syntax-highlighter textarea:focus {
+        background: transparent !important;
+        box-shadow: none !important;
+        outline: none !important;
+    }
+    
+    .editor-placeholder {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        color: #a0aec0;
+        text-align: center;
+        background: #2d3748;
+    }
+    
+    .editor-placeholder i {
+        font-size: 56px;
+        margin-bottom: 20px;
+        color: #4a5568;
+    }
+    
+    .editor-placeholder h5 {
+        color: #e2e8f0;
+        margin-bottom: 8px;
+        font-weight: 600;
+    }
+    
+    .editor-placeholder p {
+        color: #a0aec0;
+        font-size: 14px;
+    }
+    
+    .btn-group {
+        display: flex;
+        gap: 12px;
+    }
+    
+    .btn-sm {
+        padding: 8px 16px;
+        font-size: 13px;
+        font-weight: 500;
+        border-radius: 8px;
+        transition: all 0.2s ease;
+    }
+    
+    .btn-sm:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    
+    .toolbar {
+        padding: 12px 16px;
+        background: linear-gradient(135deg, #f8fafb 0%, #f1f5f9 100%);
+        border-bottom: 1px solid #e1e5e9;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        border-radius: 12px 12px 0 0;
+    }
+    
+    .toolbar .btn {
+        padding: 8px 16px;
+        font-size: 13px;
+        font-weight: 500;
+        border-radius: 8px;
+        transition: all 0.2s ease;
+    }
+    
+    .toolbar .btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    
+    .loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 300px;
+        color: #64748b;
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+        border-radius: 8px;
+        margin: 20px;
+    }
+    
+    .loading i {
+        font-size: 24px;
+        margin-bottom: 12px;
+        color: #3b82f6;
+    }
+    
+    .error-message {
+        color: #dc2626;
+        background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+        border: 1px solid #fecaca;
+        border-radius: 10px;
+        padding: 16px;
+        margin: 20px;
+        border-left: 4px solid #dc2626;
+    }
+    
+    .success-message {
+        color: #059669;
+        background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+        border: 1px solid #bbf7d0;
+        border-radius: 10px;
+        padding: 16px;
+        margin: 20px;
+        border-left: 4px solid #059669;
+    }
+    
+    .file-info {
+        font-size: 12px;
+        color: #64748b;
+        margin-left: auto;
+        background: #f1f5f9;
+        padding: 4px 8px;
+        border-radius: 6px;
+        font-weight: 500;
+    }
+    
+    .context-menu {
+        position: absolute;
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+        z-index: 1000;
+        min-width: 180px;
+        overflow: hidden;
+    }
+    
+    .context-menu-item {
+        padding: 12px 16px;
+        cursor: pointer;
+        border-bottom: 1px solid #f1f5f9;
+        font-size: 14px;
+        color: #475569;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+    }
+    
+    .context-menu-item:hover {
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+        color: #1e293b;
+    }
+    
+    .context-menu-item:last-child {
+        border-bottom: none;
+    }
+    
+    .context-menu-item i {
+        width: 18px;
+        margin-right: 12px;
+        color: #64748b;
+    }
+    
+    .context-menu-item:hover i {
+        color: #3b82f6;
+    }
+    
+    /* 响应式设计 */
+    @media (max-width: 1200px) {
+        .file-tree-panel {
+            width: 320px;
+            min-width: 280px;
+        }
+    }
+    
+    @media (max-width: 768px) {
+        .model-manager-container {
+            flex-direction: column;
+            height: auto;
+        }
+        
+        .file-tree-panel {
+            width: 100%;
+            height: 300px;
+            resize: none;
+        }
+        
+        .file-editor-panel {
+            min-width: auto;
+            height: 500px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-3">
+        <div class="col">
+            <h2><i class="fas fa-code"></i> 配置管理</h2>
+            <p class="text-muted">管理EOLO配置文件，包括模型配置和参数配置</p>
+        </div>
+    </div>
+    
+    <!-- 选项卡导航 -->
+    <ul class="nav nav-tabs mb-3" id="configTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="model-tab" data-bs-toggle="tab" data-bs-target="#model-config" type="button" role="tab">
+                <i class="fas fa-code"></i> 模型配置
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="setting-tab" data-bs-toggle="tab" data-bs-target="#setting-config" type="button" role="tab">
+                <i class="fas fa-cogs"></i> 参数配置
+            </button>
+        </li>
+    </ul>
+    
+    <!-- 选项卡内容 -->
+    <div class="tab-content" id="configTabsContent">
+        <!-- 模型配置选项卡 -->
+        <div class="tab-pane fade show active" id="model-config" role="tabpanel">
+            <div class="model-manager-container">
+                <!-- 文件树面板 -->
+                <div class="file-tree-panel">
+                    <div class="panel-header">
+                        <span><i class="fas fa-folder-tree"></i> 模型配置</span>
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="refreshTree()">
+                                <i class="fas fa-refresh"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="panel-content">
+                        <div id="tree-loading" class="loading">
+                            <i class="fas fa-spinner fa-spin"></i> 加载中...
+                            <div id="debug-info" style="margin-top: 10px; font-size: 12px; color: #666;"></div>
+                        </div>
+                        <div id="tree-content" style="display: none;">
+                            <!-- Common文件夹 -->
+                            <div class="tree-section">
+                                <h4><i class="fas fa-users"></i> 通用配置 (common)</h4>
+                                <ul id="common-tree" class="file-tree"></ul>
+                            </div>
+                            
+                            <!-- 用户文件夹 -->
+                            <div class="tree-section">
+                                <h4><i class="fas fa-user"></i> 我的配置</h4>
+                                <ul id="user-tree" class="file-tree"></ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 文件编辑器面板 -->
+                <div class="file-editor-panel">
+                    <div class="panel-header">
+                        <span><i class="fas fa-edit"></i> 文件编辑器</span>
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-sm btn-primary" onclick="enterEditMode()" id="edit-btn" style="display: none;">
+                                <i class="fas fa-edit"></i> 编辑
+                            </button>
+                            <button type="button" class="btn btn-sm btn-success" onclick="saveFile()" id="save-btn" style="display: none;">
+                                <i class="fas fa-save"></i> 保存
+                            </button>
+                            <button type="button" class="btn btn-sm btn-warning" onclick="testModel()" id="test-btn" style="display: none;">
+                                <i class="fas fa-play"></i> 测试
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="createNewFile()">
+                                <i class="fas fa-plus"></i> 新建
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="editor-header" class="editor-header" style="display: none;">
+                        <span id="current-file-path"></span>
+                        <div class="file-info">
+                            <span id="file-size"></span>
+                        </div>
+                    </div>
+                    
+                    <div class="editor-content">
+                        <div id="editor-placeholder" class="editor-placeholder">
+                            <i class="fas fa-file-code"></i>
+                            <h5>选择一个文件开始编辑</h5>
+                            <p>在左侧文件树中点击文件可查看和编辑内容</p>
+                        </div>
+                        
+                        <textarea id="code-editor" class="code-editor" style="display: none;" placeholder="在这里编辑文件内容..."></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 参数配置选项卡 -->
+        <div class="tab-pane fade" id="setting-config" role="tabpanel">
+            <div class="model-manager-container">
+                <!-- 参数文件树面板 -->
+                <div class="file-tree-panel">
+                    <div class="panel-header">
+                        <span><i class="fas fa-folder-tree"></i> 参数配置</span>
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="refreshSettingTree()">
+                                <i class="fas fa-refresh"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="panel-content">
+                        <div id="setting-tree-loading" class="loading">
+                            <i class="fas fa-spinner fa-spin"></i> 加载中...
+                            <div id="setting-debug-info" style="margin-top: 10px; font-size: 12px; color: #666;"></div>
+                        </div>
+                        <div id="setting-tree-content" style="display: none;">
+                            <!-- Default文件夹 -->
+                            <div class="tree-section">
+                                <h4><i class="fas fa-globe"></i> 默认配置 (default)</h4>
+                                <ul id="setting-default-tree" class="file-tree"></ul>
+                            </div>
+                            
+                            <!-- 用户文件夹 -->
+                            <div class="tree-section">
+                                <h4><i class="fas fa-user"></i> 我的参数配置</h4>
+                                <ul id="setting-user-tree" class="file-tree"></ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 参数编辑器面板 -->
+                <div class="file-editor-panel">
+                    <div class="panel-header">
+                        <span><i class="fas fa-edit"></i> 参数编辑器</span>
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-sm btn-primary" onclick="enterSettingEditMode()" id="setting-edit-btn" style="display: none;">
+                                <i class="fas fa-edit"></i> 编辑
+                            </button>
+                            <button type="button" class="btn btn-sm btn-success" onclick="saveSettingFile()" id="setting-save-btn" style="display: none;">
+                                <i class="fas fa-save"></i> 保存
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="createNewSettingFile()">
+                                <i class="fas fa-plus"></i> 新建
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="setting-editor-header" class="editor-header" style="display: none;">
+                        <span id="setting-current-file-path"></span>
+                        <div class="file-info">
+                            <span id="setting-file-size"></span>
+                        </div>
+                    </div>
+                    
+                    <div class="editor-content">
+                        <div id="setting-editor-placeholder" class="editor-placeholder">
+                            <i class="fas fa-cogs"></i>
+                            <h5>选择一个参数配置文件开始编辑</h5>
+                            <p>在左侧文件树中点击文件可查看和编辑参数配置</p>
+                        </div>
+                        
+                        <textarea id="setting-code-editor" class="code-editor" style="display: none;" placeholder="在这里编辑参数配置内容..."></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<!-- 上下文菜单 -->
+<div id="context-menu" class="context-menu" style="display: none;">
+    <div class="context-menu-item" onclick="openFile()">
+        <i class="fas fa-eye"></i> 查看文件
+    </div>
+    <div class="context-menu-item" onclick="editFile()">
+        <i class="fas fa-edit"></i> 编辑文件
+    </div>
+    <div class="context-menu-item" onclick="deleteFile()">
+        <i class="fas fa-trash"></i> 删除
+    </div>
+    <div class="context-menu-item" onclick="createFolderDialog()">
+        <i class="fas fa-folder-plus"></i> 新建文件夹
+    </div>
+</div>
+
+<!-- 新建文件模态框 -->
+<div class="modal fade" id="createFileModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">新建文件</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="createFileForm">
+                    <div class="mb-3">
+                        <label for="fileName" class="form-label">文件名</label>
+                        <input type="text" class="form-control" id="fileName" placeholder="例如: my_config.yaml">
+                        <div class="form-text">建议使用 .yaml, .yml, .txt, .md 等扩展名</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="parentPath" class="form-label">保存位置</label>
+                        <select class="form-control" id="parentPath">
+                            <option value="">根目录</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="fileContent" class="form-label">初始内容（可选）</label>
+                        <textarea class="form-control" id="fileContent" rows="5" placeholder="文件的初始内容..."></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="submitCreateFile()">创建</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 新建文件夹模态框 -->
+<div class="modal fade" id="createFolderModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">新建文件夹</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="createFolderForm">
+                    <div class="mb-3">
+                        <label for="folderName" class="form-label">文件夹名称</label>
+                        <input type="text" class="form-control" id="folderName" placeholder="例如: experiments">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">创建位置</label>
+                        <div id="folderLocation" class="form-text"></div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="submitCreateFolder()">创建</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 参数配置相关模态框 -->
+<!-- 新建参数配置文件模态框 -->
+<div class="modal fade" id="createSettingFileModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">新建参数配置文件</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="createSettingFileForm">
+                    <div class="mb-3">
+                        <label for="settingFileName" class="form-label">文件名</label>
+                        <input type="text" class="form-control" id="settingFileName" placeholder="例如: training_params.yaml">
+                        <div class="form-text">建议使用 .yaml, .yml, .json, .txt, .md 等扩展名</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="settingParentPath" class="form-label">保存位置</label>
+                        <select class="form-control" id="settingParentPath">
+                            <option value="">根目录</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="settingFileContent" class="form-label">初始内容（可选）</label>
+                        <textarea class="form-control" id="settingFileContent" rows="5" placeholder="参数配置的初始内容..."></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="submitCreateSettingFile()">创建</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 新建参数配置文件夹模态框 -->
+<div class="modal fade" id="createSettingFolderModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">新建参数配置文件夹</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="createSettingFolderForm">
+                    <div class="mb-3">
+                        <label for="settingFolderName" class="form-label">文件夹名称</label>
+                        <input type="text" class="form-control" id="settingFolderName" placeholder="例如: training_configs">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">创建位置</label>
+                        <div id="settingFolderLocation" class="form-text"></div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="submitCreateSettingFolder()">创建</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 模型测试结果模态框 -->
+<div class="modal fade" id="testResultModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-flask"></i> 模型测试结果
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="testResultStatus" class="alert" role="alert" style="display: none;"></div>
+                <div class="mb-3">
+                    <label class="form-label">测试的模型文件:</label>
+                    <div id="testModelPath" class="form-text"></div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">测试输出:</label>
+                    <pre id="testOutput" class="bg-dark text-light p-3" style="max-height: 400px; overflow-y: auto; font-size: 12px; border-radius: 5px;"></pre>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentFile = null;
+let contextMenuTarget = null;
+let fileTreeData = null;
+let hasUnsavedChanges = false;
+
+// 页面加载时初始化
+$(document).ready(function() {
+    console.log('页面已加载，开始初始化...');
+    $('#debug-info').text('正在初始化...');
+    
+    loadFileTree();
+    
+    // 监听编辑器内容变化 - 只在编辑模式下生效
+    $('#code-editor').on('input', function() {
+        if (currentFile && currentFile.isEditing) {
+            hasUnsavedChanges = true;
+        }
+    });
+    
+    // 隐藏上下文菜单
+    $(document).click(function() {
+        $('#context-menu').hide();
+    });
+    
+    // 阻止上下文菜单冒泡
+    $('#context-menu').click(function(e) {
+        e.stopPropagation();
+    });
+    
+    // 快捷键保存
+    $(document).keydown(function(e) {
+        if (e.ctrlKey && e.key === 's') {
+            e.preventDefault();
+            // 判断当前活跃的编辑器
+            if (currentFile && currentFile.isEditing) {
+                saveFile();
+            } else if (currentSettingFile && currentSettingFile.isEditing) {
+                saveSettingFile();
+            }
+        }
+    });
+});
+
+// 加载文件树
+function loadFileTree() {
+    console.log('开始加载文件树...');
+    $('#debug-info').text('正在请求API...');
+    $('#tree-loading').show();
+    $('#tree-content').hide();
+    
+    $.get('/models/api/tree/')
+        .done(function(response) {
+            console.log('API响应:', response);
+            $('#debug-info').text('API响应成功');
+            
+            if (response.success) {
+                fileTreeData = response.data;
+                renderFileTree();
+                $('#tree-loading').hide();
+                $('#tree-content').show();
+                console.log('文件树加载成功');
+            } else {
+                console.error('API返回错误:', response.error);
+                $('#debug-info').text('API返回错误: ' + response.error);
+                $('#tree-loading').html('<div class="error-message">加载失败: ' + response.error + '</div>');
+            }
+        })
+        .fail(function(xhr, status, error) {
+            console.error('网络请求失败:', {
+                status: xhr.status,
+                statusText: xhr.statusText,
+                responseText: xhr.responseText,
+                error: error
+            });
+            
+            let errorMsg = '网络错误';
+            if (xhr.status === 302 || xhr.status === 0) {
+                errorMsg = '需要登录 - 状态码: ' + xhr.status;
+                $('#debug-info').text('重定向到登录页面，状态码: ' + xhr.status);
+            } else if (xhr.status === 403) {
+                errorMsg = '没有权限访问';
+                $('#debug-info').text('权限不足，状态码: ' + xhr.status);
+            } else if (xhr.status === 404) {
+                errorMsg = 'API接口不存在';
+                $('#debug-info').text('接口不存在，状态码: ' + xhr.status);
+            } else {
+                $('#debug-info').text('请求失败，状态码: ' + xhr.status + ', 错误: ' + error);
+            }
+            
+            $('#tree-loading').html('<div class="error-message">' + errorMsg + 
+                '<br><small>详情请查看浏览器控制台</small>' +
+                '<br><button class="btn btn-sm btn-primary mt-2" onclick="loadFileTree()">重试</button></div>');
+        });
+}
+
+// 渲染文件树
+function renderFileTree() {
+    if (!fileTreeData) return;
+    
+    // 渲染common树
+    $('#common-tree').html(renderTreeNode(fileTreeData.common, 'common'));
+    
+    // 渲染用户树
+    $('#user-tree').html(renderTreeNode(fileTreeData.user, fileTreeData.username));
+}
+
+// 渲染树节点
+function renderTreeNode(node, rootType) {
+    if (!node || !node.children) return '';
+    
+    let html = '';
+    
+    node.children.forEach(function(child) {
+        const isFile = child.is_file;
+        const icon = isFile ? 'fas fa-file' : 'fas fa-folder';
+        const cssClass = isFile ? 'file' : 'folder';
+        const canEdit = rootType !== 'common' || false; // common文件只能查看
+        const hasChildren = !isFile && child.children && child.children.length > 0;
+        
+        html += `<li class="tree-item">
+            <div class="tree-node ${cssClass} ${hasChildren ? 'collapsed' : ''}" data-path="${child.path}" data-is-file="${isFile}" data-can-edit="${canEdit}">`;
+        
+        // 如果是文件夹且有子项，添加展开/折叠按钮
+        if (!isFile && hasChildren) {
+            html += `<i class="folder-toggle collapsed fas fa-chevron-right" onclick="toggleFolder(event, this)"></i>`;
+        } else if (!isFile) {
+            // 空文件夹，添加占位符
+            html += `<span class="folder-toggle" style="width: 16px;"></span>`;
+        }
+        
+        html += `<i class="${icon} folder-icon"></i>
+                <span>${child.name}</span>
+                ${isFile ? `<span class="file-info">${formatFileSize(child.size)}</span>` : ''}
+            </div>`;
+        
+        if (hasChildren) {
+            html += `<ul class="tree-children" style="display: none;">${renderTreeNode(child, rootType)}</ul>`;
+        }
+        
+        html += '</li>';
+    });
+    
+    return html;
+}
+
+// 格式化文件大小
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+// 绑定树节点点击事件
+$(document).on('click', '.tree-node:not([data-type="setting"])', function(e) {
+    e.stopPropagation();
+    
+    const path = $(this).data('path');
+    const isFile = $(this).data('is-file');
+    const canEdit = $(this).data('can-edit');
+    
+    // 移除其他节点的active状态
+    $('.tree-node:not([data-type="setting"])').removeClass('active');
+    $(this).addClass('active');
+    
+    if (isFile) {
+        loadFile(path, canEdit);
+    }
+});
+
+// 绑定右键菜单事件
+$(document).on('contextmenu', '.tree-node:not([data-type="setting"])', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const path = $(this).data('path');
+    const isFile = $(this).data('is-file');
+    const canEdit = $(this).data('can-edit');
+    
+    // 清空参数配置的上下文菜单目标
+    settingContextMenuTarget = null;
+    
+    contextMenuTarget = {
+        path: path,
+        isFile: isFile,
+        canEdit: canEdit,
+        element: $(this)
+    };
+    
+    // 显示上下文菜单
+    const menu = $('#context-menu');
+    menu.css({
+        left: e.pageX + 'px',
+        top: e.pageY + 'px',
+        display: 'block'
+    });
+    
+    // 根据权限显示/隐藏菜单项
+    menu.find('.context-menu-item').show();
+    if (!canEdit) {
+        menu.find('.context-menu-item').eq(1).hide(); // 隐藏编辑
+        menu.find('.context-menu-item').eq(2).hide(); // 隐藏删除
+        menu.find('.context-menu-item').eq(3).hide(); // 隐藏新建文件夹
+    }
+});
+
+// 加载文件内容
+function loadFile(path, canEdit = false) {
+    if (hasUnsavedChanges) {
+        if (!confirm('有未保存的更改，确定要切换文件吗？')) {
+            return;
+        }
+    }
+    
+    // 先禁用之前的语法高亮
+    if (typeof syntaxHighlighter !== 'undefined') {
+        syntaxHighlighter.disable();
+    }
+    
+    $.get('/models/api/file/', {path: path})
+        .done(function(response) {
+            if (response.success) {
+                currentFile = {
+                    path: path,
+                    canEdit: canEdit,
+                    originalContent: response.data.content,
+                    isEditing: false // 新增状态标记，默认为只读模式
+                };
+                
+                $('#editor-placeholder').hide();
+                $('#code-editor').show().val(response.data.content);
+                $('#editor-header').show();
+                $('#current-file-path').text(path);
+                
+                // 更新按钮状态 - 默认显示只读模式
+                $('#save-btn').hide();
+                if (canEdit) {
+                    $('#edit-btn').show();
+                } else {
+                    $('#edit-btn').hide();
+                }
+                
+                // 显示测试按钮（仅对YAML文件）
+                if (path.toLowerCase().endsWith('.yaml') || path.toLowerCase().endsWith('.yml')) {
+                    $('#test-btn').show();
+                } else {
+                    $('#test-btn').hide();
+                }
+                
+                hasUnsavedChanges = false;
+                
+                // 默认设置为只读模式，启用语法高亮
+                $('#code-editor').prop('readonly', true);
+                
+                // 启用语法高亮 - 始终以只读模式显示
+                setTimeout(() => {
+                    if (window.Prism && typeof syntaxHighlighter !== 'undefined') {
+                        syntaxHighlighter.enable('code-editor', path, true); // 始终以只读模式启用语法高亮
+                    }
+                }, 100);
+            } else {
+                showError('加载文件失败: ' + response.error);
+            }
+        })
+        .fail(function() {
+            showError('网络错误，无法加载文件');
+        });
+}
+
+// 进入编辑模式
+function enterEditMode() {
+    if (!currentFile || !currentFile.canEdit) {
+        showError('当前文件无法编辑');
+        return;
+    }
+    
+    // 禁用语法高亮，切换到编辑模式
+    if (typeof syntaxHighlighter !== 'undefined') {
+        syntaxHighlighter.disable();
+    }
+    
+    // 更新状态
+    currentFile.isEditing = true;
+    
+    // 设置为可编辑状态
+    $('#code-editor').prop('readonly', false).focus();
+    
+    // 更新按钮状态
+    $('#edit-btn').hide();
+    $('#save-btn').show();
+    
+    console.log('已进入编辑模式');
+}
+
+// 保存文件
+function saveFile() {
+    if (!currentFile || !currentFile.canEdit) {
+        showError('当前文件无法编辑');
+        return;
+    }
+    
+    const content = $('#code-editor').val();
+    
+    $.ajax({
+        url: '/models/api/file/',
+        method: 'POST',
+        data: JSON.stringify({
+            path: currentFile.path,
+            content: content
+        }),
+        contentType: 'application/json',
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+        }
+    })
+    .done(function(response) {
+        if (response.success) {
+            showSuccess(response.message);
+            hasUnsavedChanges = false;
+            currentFile.originalContent = content;
+            currentFile.isEditing = false;
+            
+            // 保存后切换回只读模式
+            $('#code-editor').prop('readonly', true);
+            
+            // 更新按钮状态
+            $('#save-btn').hide();
+            $('#edit-btn').show();
+            
+            // 重新启用语法高亮
+            setTimeout(() => {
+                if (window.Prism && typeof syntaxHighlighter !== 'undefined') {
+                    syntaxHighlighter.enable('code-editor', currentFile.path, true);
+                }
+            }, 100);
+            
+            console.log('文件已保存，已切换回只读模式');
+        } else {
+            showError('保存失败: ' + response.message);
+        }
+    })
+    .fail(function() {
+        showError('网络错误，无法保存文件');
+    });
+}
+
+// 刷新文件树
+function refreshTree() {
+    loadFileTree();
+}
+
+// 新建文件
+function createNewFile() {
+    populateParentPathOptions();
+    $('#createFileModal').modal('show');
+}
+
+// 填充父路径选项
+function populateParentPathOptions() {
+    const select = $('#parentPath');
+    select.html('<option value="">根目录</option>');
+    
+    if (fileTreeData && fileTreeData.username) {
+        const username = fileTreeData.username;
+        select.append(`<option value="${username}">我的配置 (${username})</option>`);
+        
+        // 添加用户文件夹的子文件夹
+        if (fileTreeData.user && fileTreeData.user.children) {
+            addFolderOptions(fileTreeData.user.children, username, select);
+        }
+    }
+}
+
+// 递归添加文件夹选项
+function addFolderOptions(nodes, parentPath, select) {
+    nodes.forEach(function(node) {
+        if (!node.is_file) {
+            const fullPath = parentPath + '/' + node.name;
+            select.append(`<option value="${fullPath}">${fullPath}</option>`);
+            
+            if (node.children) {
+                addFolderOptions(node.children, fullPath, select);
+            }
+        }
+    });
+}
+
+// 提交创建文件
+function submitCreateFile() {
+    const fileName = $('#fileName').val().trim();
+    const parentPath = $('#parentPath').val();
+    const content = $('#fileContent').val();
+    
+    if (!fileName) {
+        showError('请输入文件名');
+        return;
+    }
+    
+    $.ajax({
+        url: '/models/api/create/',
+        method: 'POST',
+        data: JSON.stringify({
+            parent_path: parentPath,
+            file_name: fileName,
+            content: content
+        }),
+        contentType: 'application/json',
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+        }
+    })
+    .done(function(response) {
+        if (response.success) {
+            showSuccess(response.message);
+            $('#createFileModal').modal('hide');
+            $('#createFileForm')[0].reset();
+            loadFileTree();
+            
+            // 加载新创建的文件
+            setTimeout(() => {
+                loadFile(response.path, true);
+            }, 500);
+        } else {
+            showError('创建失败: ' + response.message);
+        }
+    })
+    .fail(function() {
+        showError('网络错误，无法创建文件');
+    });
+}
+
+// 上下文菜单操作
+function openFile() {
+    if (contextMenuTarget && contextMenuTarget.isFile) {
+        loadFile(contextMenuTarget.path, contextMenuTarget.canEdit);
+    } else if (settingContextMenuTarget && settingContextMenuTarget.isFile) {
+        loadSettingFile(settingContextMenuTarget.path, settingContextMenuTarget.canEdit);
+    }
+    $('#context-menu').hide();
+}
+
+function editFile() {
+    if (contextMenuTarget && contextMenuTarget.isFile && contextMenuTarget.canEdit) {
+        loadFile(contextMenuTarget.path, true);
+    } else if (settingContextMenuTarget && settingContextMenuTarget.isFile && settingContextMenuTarget.canEdit) {
+        loadSettingFile(settingContextMenuTarget.path, true);
+    }
+    $('#context-menu').hide();
+}
+
+function deleteFile() {
+    let target = contextMenuTarget || settingContextMenuTarget;
+    let isSettingContext = !!settingContextMenuTarget;
+    
+    if (!target || !target.canEdit) {
+        showError('没有删除权限');
+        return;
+    }
+    
+    if (!confirm('确定要删除这个' + (target.isFile ? '文件' : '文件夹') + '吗？')) {
+        return;
+    }
+    
+    let apiUrl = isSettingContext ? '/models/api/settings/operation/' : '/models/api/operation/';
+    let reloadFunction = isSettingContext ? loadSettingFileTree : loadFileTree;
+    let currentFileObj = isSettingContext ? currentSettingFile : currentFile;
+    let clearFunction = isSettingContext ? clearSettingEditor : clearEditor;
+    
+    $.ajax({
+        url: apiUrl,
+        method: 'POST',
+        data: JSON.stringify({
+            operation: 'delete',
+            path: target.path
+        }),
+        contentType: 'application/json',
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+        }
+    })
+    .done(function(response) {
+        if (response.success) {
+            showSuccess(response.message);
+            reloadFunction();
+            
+            // 如果删除的是当前打开的文件，清空编辑器
+            if (currentFileObj && currentFileObj.path === target.path) {
+                clearFunction();
+            }
+        } else {
+            showError('删除失败: ' + response.message);
+        }
+    })
+    .fail(function() {
+        showError('网络错误，无法删除');
+    });
+    
+    $('#context-menu').hide();
+}
+
+function createFolderDialog() {
+    let target = contextMenuTarget || settingContextMenuTarget;
+    let isSettingContext = !!settingContextMenuTarget;
+    
+    if (!target || !target.canEdit) {
+        showError('没有创建权限');
+        return;
+    }
+    
+    let parentPath = target.path;
+    if (target.isFile) {
+        // 如果右键的是文件，使用其父目录
+        const pathParts = parentPath.split('/');
+        pathParts.pop();
+        parentPath = pathParts.join('/');
+    }
+    
+    if (isSettingContext) {
+        $('#settingFolderLocation').text(parentPath || '根目录');
+        $('#createSettingFolderModal').data('parent-path', parentPath);
+        $('#createSettingFolderModal').modal('show');
+    } else {
+        $('#folderLocation').text(parentPath || '根目录');
+        $('#createFolderModal').data('parent-path', parentPath);
+        $('#createFolderModal').modal('show');
+    }
+    $('#context-menu').hide();
+}
+
+function submitCreateFolder() {
+    const folderName = $('#folderName').val().trim();
+    const parentPath = $('#createFolderModal').data('parent-path') || '';
+    
+    if (!folderName) {
+        showError('请输入文件夹名称');
+        return;
+    }
+    
+    $.ajax({
+        url: '/models/api/operation/',
+        method: 'POST',
+        data: JSON.stringify({
+            operation: 'create_folder',
+            parent_path: parentPath,
+            folder_name: folderName
+        }),
+        contentType: 'application/json',
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+        }
+    })
+    .done(function(response) {
+        if (response.success) {
+            showSuccess(response.message);
+            $('#createFolderModal').modal('hide');
+            $('#createFolderForm')[0].reset();
+            loadFileTree();
+        } else {
+            showError('创建失败: ' + response.message);
+        }
+    })
+    .fail(function() {
+        showError('网络错误，无法创建文件夹');
+    });
+}
+
+// 清空编辑器
+// 清空编辑器
+function clearEditor() {
+    // 禁用语法高亮
+    if (typeof syntaxHighlighter !== 'undefined') {
+        syntaxHighlighter.disable();
+    }
+    
+    currentFile = null;
+    hasUnsavedChanges = false;
+    $('#editor-placeholder').show();
+    $('#code-editor').hide().val('');
+    $('#editor-header').hide();
+    $('#save-btn').hide();
+    $('#edit-btn').hide();
+    $('.tree-node').removeClass('active');
+}
+
+// 显示错误消息
+function showError(message) {
+    console.error('错误:', message);
+    
+    // 创建错误提示元素
+    const alertHtml = `
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="fas fa-exclamation-triangle"></i> ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+    
+    // 显示在页面顶部
+    const container = $('.container-fluid').first();
+    container.prepend(alertHtml);
+    
+    // 5秒后自动消失
+    setTimeout(() => {
+        $('.alert-danger').fadeOut();
+    }, 5000);
+}
+
+// 显示成功消息
+function showSuccess(message) {
+    console.log('成功:', message);
+    
+    // 创建成功提示元素
+    const alertHtml = `
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="fas fa-check-circle"></i> ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+    
+    // 显示在页面顶部
+    const container = $('.container-fluid').first();
+    container.prepend(alertHtml);
+    
+    // 3秒后自动消失
+    setTimeout(() => {
+        $('.alert-success').fadeOut();
+    }, 3000);
+}
+
+// ========== 参数配置相关功能 ==========
+
+let currentSettingFile = null;
+let settingContextMenuTarget = null;
+let settingFileTreeData = null;
+let hasUnsavedSettingChanges = false;
+
+// 加载参数配置文件树
+function loadSettingFileTree() {
+    console.log('开始加载参数配置文件树...');
+    $('#setting-debug-info').text('正在请求API...');
+    $('#setting-tree-loading').show();
+    $('#setting-tree-content').hide();
+    
+    $.get('/models/api/settings/tree/')
+        .done(function(response) {
+            console.log('参数配置API响应:', response);
+            $('#setting-debug-info').text('API响应成功');
+            
+            if (response.success) {
+                settingFileTreeData = response.data;
+                renderSettingFileTree();
+                $('#setting-tree-loading').hide();
+                $('#setting-tree-content').show();
+                console.log('参数配置文件树加载成功');
+            } else {
+                console.error('参数配置API返回错误:', response.error);
+                $('#setting-debug-info').text('API返回错误: ' + response.error);
+                $('#setting-tree-loading').html('<div class="error-message">加载失败: ' + response.error + '</div>');
+            }
+        })
+        .fail(function(xhr, status, error) {
+            console.error('参数配置网络请求失败:', {
+                status: xhr.status,
+                statusText: xhr.statusText,
+                responseText: xhr.responseText,
+                error: error
+            });
+            
+            let errorMsg = '网络错误';
+            if (xhr.status === 302 || xhr.status === 0) {
+                errorMsg = '需要登录 - 状态码: ' + xhr.status;
+                $('#setting-debug-info').text('重定向到登录页面，状态码: ' + xhr.status);
+            } else if (xhr.status === 403) {
+                errorMsg = '没有权限访问';
+                $('#setting-debug-info').text('权限不足，状态码: ' + xhr.status);
+            } else if (xhr.status === 404) {
+                errorMsg = 'API接口不存在';
+                $('#setting-debug-info').text('接口不存在，状态码: ' + xhr.status);
+            } else {
+                $('#setting-debug-info').text('请求失败，状态码: ' + xhr.status + ', 错误: ' + error);
+            }
+            
+            $('#setting-tree-loading').html('<div class="error-message">' + errorMsg + 
+                '<br><small>详情请查看浏览器控制台</small>' +
+                '<br><button class="btn btn-sm btn-primary mt-2" onclick="loadSettingFileTree()">重试</button></div>');
+        });
+}
+
+// 渲染参数配置文件树
+function renderSettingFileTree() {
+    if (!settingFileTreeData) return;
+    
+    // 渲染default树
+    $('#setting-default-tree').html(renderSettingTreeNode(settingFileTreeData.default, 'default'));
+    
+    // 渲染用户树
+    $('#setting-user-tree').html(renderSettingTreeNode(settingFileTreeData.user, settingFileTreeData.username));
+}
+
+// 渲染参数配置树节点
+function renderSettingTreeNode(node, rootType) {
+    if (!node || !node.children) return '';
+    
+    let html = '';
+    
+    node.children.forEach(function(child) {
+        const isFile = child.is_file;
+        const icon = isFile ? 'fas fa-file' : 'fas fa-folder';
+        const cssClass = isFile ? 'file' : 'folder';
+        const canEdit = rootType !== 'default' || false; // default文件只能查看
+        const hasChildren = !isFile && child.children && child.children.length > 0;
+        
+        html += `<li class="tree-item">
+            <div class="tree-node ${cssClass} ${hasChildren ? 'collapsed' : ''}" data-path="${child.path}" data-is-file="${isFile}" data-can-edit="${canEdit}" data-type="setting">`;
+        
+        // 如果是文件夹且有子项，添加展开/折叠按钮
+        if (!isFile && hasChildren) {
+            html += `<i class="folder-toggle collapsed fas fa-chevron-right" onclick="toggleFolder(event, this)"></i>`;
+        } else if (!isFile) {
+            // 空文件夹，添加占位符
+            html += `<span class="folder-toggle" style="width: 16px;"></span>`;
+        }
+        
+        html += `<i class="${icon} folder-icon"></i>
+                <span>${child.name}</span>
+                ${isFile ? `<span class="file-info">${formatFileSize(child.size)}</span>` : ''}
+            </div>`;
+        
+        if (hasChildren) {
+            html += `<ul class="tree-children" style="display: none;">${renderSettingTreeNode(child, rootType)}</ul>`;
+        }
+        
+        html += '</li>';
+    });
+    
+    return html;
+}
+
+// 绑定参数配置树节点点击事件
+$(document).on('click', '.tree-node[data-type="setting"]', function(e) {
+    e.stopPropagation();
+    
+    const path = $(this).data('path');
+    const isFile = $(this).data('is-file');
+    const canEdit = $(this).data('can-edit');
+    
+    // 移除其他节点的active状态
+    $('.tree-node[data-type="setting"]').removeClass('active');
+    $(this).addClass('active');
+    
+    if (isFile) {
+        loadSettingFile(path, canEdit);
+    }
+});
+
+// 绑定参数配置右键菜单事件
+$(document).on('contextmenu', '.tree-node[data-type="setting"]', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const path = $(this).data('path');
+    const isFile = $(this).data('is-file');
+    const canEdit = $(this).data('can-edit');
+    
+    // 清空模型配置的上下文菜单目标
+    contextMenuTarget = null;
+    
+    settingContextMenuTarget = {
+        path: path,
+        isFile: isFile,
+        canEdit: canEdit,
+        element: $(this)
+    };
+    
+    // 显示上下文菜单
+    const menu = $('#context-menu');
+    menu.css({
+        left: e.pageX + 'px',
+        top: e.pageY + 'px',
+        display: 'block'
+    });
+    
+    // 根据权限显示/隐藏菜单项
+    menu.find('.context-menu-item').show();
+    if (!canEdit) {
+        menu.find('.context-menu-item').eq(1).hide(); // 隐藏编辑
+        menu.find('.context-menu-item').eq(2).hide(); // 隐藏删除
+        menu.find('.context-menu-item').eq(3).hide(); // 隐藏新建文件夹
+    }
+});
+
+// 加载参数配置文件内容
+function loadSettingFile(path, canEdit = false) {
+    if (hasUnsavedSettingChanges) {
+        if (!confirm('有未保存的更改，确定要切换文件吗？')) {
+            return;
+        }
+    }
+    
+    // 先禁用之前的语法高亮
+    if (typeof syntaxHighlighter !== 'undefined') {
+        syntaxHighlighter.disable();
+    }
+    
+    $.get('/models/api/settings/file/', {path: path})
+        .done(function(response) {
+            if (response.success) {
+                currentSettingFile = {
+                    path: path,
+                    canEdit: canEdit,
+                    originalContent: response.data.content,
+                    isEditing: false // 新增状态标记，默认为只读模式
+                };
+                
+                $('#setting-editor-placeholder').hide();
+                $('#setting-code-editor').show().val(response.data.content);
+                $('#setting-editor-header').show();
+                $('#setting-current-file-path').text(path);
+                
+                // 更新按钮状态 - 默认显示只读模式
+                $('#setting-save-btn').hide();
+                if (canEdit) {
+                    $('#setting-edit-btn').show();
+                } else {
+                    $('#setting-edit-btn').hide();
+                }
+                
+                hasUnsavedSettingChanges = false;
+                
+                // 默认设置为只读模式，启用语法高亮
+                $('#setting-code-editor').prop('readonly', true);
+                
+                // 启用语法高亮 - 始终以只读模式显示
+                setTimeout(() => {
+                    if (window.Prism && typeof syntaxHighlighter !== 'undefined') {
+                        syntaxHighlighter.enable('setting-code-editor', path, true); // 始终以只读模式启用语法高亮
+                    }
+                }, 100);
+            } else {
+                showError('加载参数配置文件失败: ' + response.error);
+            }
+        })
+        .fail(function() {
+            showError('网络错误，无法加载参数配置文件');
+        });
+}
+
+// 进入参数配置编辑模式
+function enterSettingEditMode() {
+    if (!currentSettingFile || !currentSettingFile.canEdit) {
+        showError('当前参数配置文件无法编辑');
+        return;
+    }
+    
+    // 禁用语法高亮，切换到编辑模式
+    if (typeof syntaxHighlighter !== 'undefined') {
+        syntaxHighlighter.disable();
+    }
+    
+    // 更新状态
+    currentSettingFile.isEditing = true;
+    
+    // 设置为可编辑状态
+    $('#setting-code-editor').prop('readonly', false).focus();
+    
+    // 更新按钮状态
+    $('#setting-edit-btn').hide();
+    $('#setting-save-btn').show();
+    
+    console.log('已进入参数配置编辑模式');
+}
+
+// 保存参数配置文件
+function saveSettingFile() {
+    if (!currentSettingFile || !currentSettingFile.canEdit) {
+        showError('当前参数配置文件无法编辑');
+        return;
+    }
+    
+    const content = $('#setting-code-editor').val();
+    
+    $.ajax({
+        url: '/models/api/settings/file/',
+        method: 'POST',
+        data: JSON.stringify({
+            path: currentSettingFile.path,
+            content: content
+        }),
+        contentType: 'application/json',
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+        }
+    })
+    .done(function(response) {
+        if (response.success) {
+            showSuccess(response.message);
+            hasUnsavedSettingChanges = false;
+            currentSettingFile.originalContent = content;
+            currentSettingFile.isEditing = false;
+            
+            // 保存后切换回只读模式
+            $('#setting-code-editor').prop('readonly', true);
+            
+            // 更新按钮状态
+            $('#setting-save-btn').hide();
+            $('#setting-edit-btn').show();
+            
+            // 重新启用语法高亮
+            setTimeout(() => {
+                if (window.Prism && typeof syntaxHighlighter !== 'undefined') {
+                    syntaxHighlighter.enable('setting-code-editor', currentSettingFile.path, true);
+                }
+            }, 100);
+            
+            console.log('参数配置文件已保存，已切换回只读模式');
+        } else {
+            showError('保存失败: ' + response.message);
+        }
+    })
+    .fail(function() {
+        showError('网络错误，无法保存参数配置文件');
+    });
+}
+
+// 刷新参数配置文件树
+function refreshSettingTree() {
+    loadSettingFileTree();
+}
+
+// 新建参数配置文件
+function createNewSettingFile() {
+    populateSettingParentPathOptions();
+    $('#createSettingFileModal').modal('show');
+}
+
+// 填充参数配置父路径选项
+function populateSettingParentPathOptions() {
+    const select = $('#settingParentPath');
+    select.html('<option value="">根目录</option>');
+    
+    if (settingFileTreeData && settingFileTreeData.username) {
+        const username = settingFileTreeData.username;
+        select.append(`<option value="${username}">我的参数配置 (${username})</option>`);
+        
+        // 添加用户文件夹的子文件夹
+        if (settingFileTreeData.user && settingFileTreeData.user.children) {
+            addSettingFolderOptions(settingFileTreeData.user.children, username, select);
+        }
+    }
+}
+
+// 递归添加参数配置文件夹选项
+function addSettingFolderOptions(nodes, parentPath, select) {
+    nodes.forEach(function(node) {
+        if (!node.is_file) {
+            const fullPath = parentPath + '/' + node.name;
+            select.append(`<option value="${fullPath}">${fullPath}</option>`);
+            
+            if (node.children) {
+                addSettingFolderOptions(node.children, fullPath, select);
+            }
+        }
+    });
+}
+
+// 提交创建参数配置文件
+function submitCreateSettingFile() {
+    const fileName = $('#settingFileName').val().trim();
+    const parentPath = $('#settingParentPath').val();
+    const content = $('#settingFileContent').val();
+    
+    if (!fileName) {
+        showError('请输入文件名');
+        return;
+    }
+    
+    $.ajax({
+        url: '/models/api/settings/create/',
+        method: 'POST',
+        data: JSON.stringify({
+            parent_path: parentPath,
+            file_name: fileName,
+            content: content
+        }),
+        contentType: 'application/json',
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+        }
+    })
+    .done(function(response) {
+        if (response.success) {
+            showSuccess(response.message);
+            $('#createSettingFileModal').modal('hide');
+            $('#createSettingFileForm')[0].reset();
+            loadSettingFileTree();
+            
+            // 加载新创建的文件
+            setTimeout(() => {
+                loadSettingFile(response.path, true);
+            }, 500);
+        } else {
+            showError('创建失败: ' + response.message);
+        }
+    })
+    .fail(function() {
+        showError('网络错误，无法创建参数配置文件');
+    });
+}
+
+// 提交创建参数配置文件夹
+function submitCreateSettingFolder() {
+    const folderName = $('#settingFolderName').val().trim();
+    const parentPath = $('#createSettingFolderModal').data('parent-path') || '';
+    
+    if (!folderName) {
+        showError('请输入文件夹名称');
+        return;
+    }
+    
+    $.ajax({
+        url: '/models/api/settings/operation/',
+        method: 'POST',
+        data: JSON.stringify({
+            operation: 'create_folder',
+            parent_path: parentPath,
+            folder_name: folderName
+        }),
+        contentType: 'application/json',
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+        }
+    })
+    .done(function(response) {
+        if (response.success) {
+            showSuccess(response.message);
+            $('#createSettingFolderModal').modal('hide');
+            $('#createSettingFolderForm')[0].reset();
+            loadSettingFileTree();
+        } else {
+            showError('创建失败: ' + response.message);
+        }
+    })
+    .fail(function() {
+        showError('网络错误，无法创建参数配置文件夹');
+    });
+}
+
+// 清空参数配置编辑器
+// 清空参数配置编辑器
+function clearSettingEditor() {
+    // 禁用语法高亮
+    if (typeof syntaxHighlighter !== 'undefined') {
+        syntaxHighlighter.disable();
+    }
+    
+    currentSettingFile = null;
+    hasUnsavedSettingChanges = false;
+    $('#setting-editor-placeholder').show();
+    $('#setting-code-editor').hide().val('');
+    $('#setting-editor-header').hide();
+    $('#setting-save-btn').hide();
+    $('#setting-edit-btn').hide();
+    $('.tree-node[data-type="setting"]').removeClass('active');
+}
+
+// 监听参数配置编辑器内容变化
+$(document).ready(function() {
+    $('#setting-code-editor').on('input', function() {
+        if (currentSettingFile && currentSettingFile.isEditing) {
+            hasUnsavedSettingChanges = true;
+        }
+    });
+    
+    // 监听模型配置编辑器内容变化
+    $('#code-editor').on('input', function() {
+        if (currentFile && currentFile.isEditing) {
+            hasUnsavedChanges = true;
+        }
+    });
+    
+    // 监听选项卡切换事件
+    $('#setting-tab').on('shown.bs.tab', function (e) {
+        // 当切换到参数配置选项卡时，加载参数配置文件树
+        if (!settingFileTreeData) {
+            loadSettingFileTree();
+        }
+    });
+});
+
+// 获取CSRF Token
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+// 切换文件夹的展开/折叠状态
+function toggleFolder(event, element) {
+    event.stopPropagation(); // 阻止事件冒泡
+    
+    const treeNode = element.parentElement;
+    const treeItem = treeNode.parentElement;
+    const childrenContainer = treeItem.querySelector('.tree-children');
+    
+    if (!childrenContainer) return;
+    
+    // 切换展开/折叠状态
+    if (element.classList.contains('expanded')) {
+        // 折叠文件夹
+        element.classList.remove('expanded');
+        element.classList.add('collapsed');
+        treeNode.classList.remove('expanded');
+        treeNode.classList.add('collapsed');
+        childrenContainer.style.display = 'none';
+    } else {
+        // 展开文件夹
+        element.classList.remove('collapsed');
+        element.classList.add('expanded');
+        treeNode.classList.remove('collapsed');
+        treeNode.classList.add('expanded');
+        childrenContainer.style.display = 'block';
+    }
+}
+
+// 语法高亮相关功能 - 简化优雅版本
+let syntaxHighlighter = {
+    isHighlightEnabled: false,
+    currentEditor: null,
+    currentHighlighter: null,
+    
+    // 检测文件类型
+    detectLanguage: function(filePath) {
+        if (!filePath) return null;
+        
+        const ext = filePath.split('.').pop().toLowerCase();
+        const languageMap = {
+            'yaml': 'yaml',
+            'yml': 'yaml',
+            'json': 'json',
+            'js': 'javascript',
+            'javascript': 'javascript',
+            'py': 'python',
+            'python': 'python',
+            'md': 'markdown',
+            'markdown': 'markdown',
+            'xml': 'xml',
+            'html': 'markup',
+            'css': 'css',
+            'scss': 'scss',
+            'sh': 'bash',
+            'bash': 'bash'
+        };
+        
+        return languageMap[ext] || 'text';
+    },
+    
+    // 启用语法高亮 - 简化版本，只在只读模式下使用
+    enable: function(editorId, filePath, readOnly = false) {
+        const editor = document.getElementById(editorId);
+        if (!editor || editor.tagName !== 'TEXTAREA') return;
+        
+        const language = this.detectLanguage(filePath);
+        if (!language || language === 'text') return;
+        
+        // 如果是可编辑模式，显示编辑提示而不是语法高亮
+        if (!readOnly) {
+            this.showEditingMode(editor);
+            return;
+        }
+        
+        this.currentEditor = editor;
+        
+        // 创建语法高亮显示容器
+        const highlighter = document.createElement('div');
+        highlighter.className = 'syntax-highlighter-readonly';
+        highlighter.innerHTML = `<pre><code class="language-${language}"></code></pre>`;
+        
+        // 隐藏原始编辑器，显示语法高亮
+        editor.style.display = 'none';
+        
+        // 插入语法高亮容器
+        const parent = editor.parentNode;
+        parent.insertBefore(highlighter, editor);
+        
+        // 添加可编辑标识
+        if (currentFile && currentFile.canEdit) {
+            highlighter.setAttribute('data-editable', 'true');
+            highlighter.style.cursor = 'pointer';
+            highlighter.title = '点击编辑文件';
+        }
+        
+        this.currentHighlighter = highlighter;
+        this.isHighlightEnabled = true;
+        
+        // 更新内容并应用语法高亮
+        this.updateHighlight();
+        
+        // 添加点击事件，点击时切换到编辑模式
+        highlighter.addEventListener('click', () => {
+            if (currentFile && currentFile.canEdit) {
+                this.switchToEditMode();
+            }
+        });
+    },
+    
+    // 显示编辑模式
+    showEditingMode: function(editor) {
+        // 确保编辑器可见并正常显示
+        editor.style.display = 'block';
+        editor.style.background = '#2d3748';
+        editor.style.color = '#e2e8f0';
+        
+        // 移除任何现有的语法高亮
+        this.disable();
+    },
+    
+    // 切换到编辑模式
+    switchToEditMode: function() {
+        if (!this.currentEditor) return;
+        
+        // 显示编辑器
+        this.currentEditor.style.display = 'block';
+        this.currentEditor.focus();
+        
+        // 移除语法高亮显示
+        if (this.currentHighlighter) {
+            this.currentHighlighter.remove();
+            this.currentHighlighter = null;
+        }
+        
+        this.isHighlightEnabled = false;
+        
+        // 显示编辑提示
+        this.showEditingHint();
+    },
+    
+    // 显示编辑提示
+    showEditingHint: function() {
+        // 创建临时提示
+        const hint = document.createElement('div');
+        hint.className = 'edit-hint';
+        hint.innerHTML = `
+            <i class="fas fa-edit"></i>
+            <span>编辑模式已启用 - 按 Ctrl+S 保存，失去焦点时恢复语法高亮</span>
+        `;
+        
+        const parent = this.currentEditor.parentNode;
+        parent.insertBefore(hint, this.currentEditor);
+        
+        // 3秒后自动移除提示
+        setTimeout(() => {
+            if (hint.parentNode) {
+                hint.remove();
+            }
+        }, 3000);
+        
+        // 当编辑器失去焦点且内容未变化时，恢复语法高亮
+        const blurHandler = () => {
+            setTimeout(() => {
+                if (currentFile && !hasUnsavedChanges) {
+                    this.enable(this.currentEditor.id, currentFile.path, !currentFile.canEdit);
+                }
+            }, 500);
+            this.currentEditor.removeEventListener('blur', blurHandler);
+        };
+        
+        this.currentEditor.addEventListener('blur', blurHandler);
+    },
+    
+    // 禁用语法高亮
+    disable: function() {
+        if (this.currentHighlighter) {
+            this.currentHighlighter.remove();
+            this.currentHighlighter = null;
+        }
+        
+        if (this.currentEditor) {
+            this.currentEditor.style.display = 'block';
+            this.currentEditor = null;
+        }
+        
+        this.isHighlightEnabled = false;
+    },
+    
+    // 更新高亮内容
+    updateHighlight: function() {
+        if (!this.isHighlightEnabled || !this.currentEditor || !this.currentHighlighter) return;
+        
+        const codeElement = this.currentHighlighter.querySelector('code');
+        
+        if (codeElement && window.Prism) {
+            // 更新代码内容
+            codeElement.textContent = this.currentEditor.value;
+            
+            // 应用语法高亮
+            Prism.highlightElement(codeElement);
+        }
+    }
+};
+
+// 模型测试函数
+function testModel() {
+    if (!currentFile || !currentFile.path) {
+        showError('请先选择一个模型文件');
+        return;
+    }
+    
+    // 检查文件是否为YAML格式
+    if (!currentFile.path.toLowerCase().endsWith('.yaml') && !currentFile.path.toLowerCase().endsWith('.yml')) {
+        showError('只能测试YAML格式的模型配置文件');
+        return;
+    }
+    
+    // 显示加载状态
+    const testBtn = $('#test-btn');
+    const originalText = testBtn.html();
+    testBtn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> 测试中...');
+    
+    // 发送测试请求
+    $.ajax({
+        url: '/models/api/test/',
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
+        },
+        data: JSON.stringify({
+            model_path: currentFile.path
+        }),
+        success: function(response) {
+            // 恢复按钮状态
+            testBtn.prop('disabled', false).html(originalText);
+            
+            if (response.success) {
+                // 显示测试结果模态框
+                $('#testModelPath').text(currentFile.path);
+                $('#testOutput').text(response.output || '无输出内容');
+                
+                // 设置状态提示
+                const statusDiv = $('#testResultStatus');
+                if (response.test_success) {
+                    statusDiv.removeClass('alert-danger').addClass('alert-success')
+                           .html('<i class="fas fa-check-circle"></i> 模型测试通过！')
+                           .show();
+                } else {
+                    statusDiv.removeClass('alert-success').addClass('alert-danger')
+                           .html('<i class="fas fa-exclamation-triangle"></i> 模型测试失败，请检查配置文件')
+                           .show();
+                }
+                
+                // 显示模态框
+                $('#testResultModal').modal('show');
+            } else {
+                showError('测试执行失败: ' + response.message);
+            }
+        },
+        error: function(xhr, status, error) {
+            // 恢复按钮状态
+            testBtn.prop('disabled', false).html(originalText);
+            
+            // 显示错误信息
+            showError('网络错误，无法执行模型测试: ' + error);
+        }
+    });
+}
+</script>
+
+<!-- Prism.js for syntax highlighting -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-yaml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markdown.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-css.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-xml.min.js"></script>
+{% endblock %}
