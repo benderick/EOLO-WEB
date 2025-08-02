@@ -143,7 +143,7 @@ GPU_CONFIG = {
 # 实验队列调度配置
 QUEUE_SCHEDULER_CONFIG = {
     # 队列检查间隔（秒）
-    'CHECK_INTERVAL': 30,
+    'CHECK_INTERVAL': 60,
     # 是否在应用启动时自动启动调度器
     'AUTO_START': True,
     # 调度器线程名称

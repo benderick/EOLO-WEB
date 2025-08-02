@@ -3,6 +3,9 @@
 {% block title %}GPU使用冲突 - {{ experiment.name }}{% endblock %}
 
 {% block content %}
+<!-- 隐藏的CSRF token，供JavaScript使用 -->
+{% csrf_token %}
+
 <div class="container mt-4">
     <div class="row justify-content-center">
         <div class="col-lg-8">
@@ -93,13 +96,13 @@
                                     <p class="card-text text-muted">
                                         等待GPU空闲后自动启动实验。推荐选择此选项以避免资源冲突。
                                     </p>
-                                    <form method="post" action="{% url 'experiments:start' experiment.pk %}">
-                                        {% csrf_token %}
-                                        <input type="hidden" name="force_start" value="true">
-                                        <button type="submit" class="btn btn-info">
-                                            <i class="fas fa-clock me-2"></i>加入排队
-                                        </button>
-                                    </form>
+                                    <button id="queueExperimentBtn" class="btn btn-info" 
+                                            onclick="queueExperiment({{ experiment.pk }})"
+                                    <button id="queueExperimentBtn" class="btn btn-info" 
+                                            onclick="queueExperiment({{ experiment.pk }})"
+                                            title="将实验加入队列，等待GPU可用时自动启动">
+                                        <i class="fas fa-clock me-2"></i>加入排队
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -158,4 +161,48 @@
         </div>
     </div>
 </div>
+
+<script>
+// 加入队列功能
+function queueExperiment(experimentId) {
+    if (!confirm('确认将实验加入队列？实验将在GPU可用时自动启动。')) {
+        return;
+    }
+    
+    const button = document.getElementById('queueExperimentBtn');
+    const originalContent = button.innerHTML;
+    
+    // 显示加载状态
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>加入队列中...';
+    
+    fetch(`/experiments/${experimentId}/queue/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // 加入队列成功，显示成功消息并跳转
+            alert('实验已成功加入队列！将在GPU可用时自动启动。');
+            window.location.href = `/experiments/${experimentId}/`;
+        } else {
+            alert('加入队列失败: ' + data.error);
+            // 恢复按钮状态
+            button.disabled = false;
+            button.innerHTML = originalContent;
+        }
+    })
+    .catch(error => {
+        console.error('加入队列请求失败:', error);
+        alert('加入队列失败: 网络错误');
+        // 恢复按钮状态
+        button.disabled = false;
+        button.innerHTML = originalContent;
+    });
+}
+</script>
 {% endblock %}

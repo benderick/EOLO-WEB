@@ -12,6 +12,8 @@ wheels/
 # Django静态文件收集目录（生产环境用）
 staticfiles/
 
+tmp/
+
 # 其他临时文件
 *.log
 .DS_Store

@@ -145,8 +145,8 @@ class Experiment(models.Model):
             setting_param = f"setting={self.setting_config}"
         
         # 基本命令
-        base_cmd = "uv run src/train.py -m"
-        
+        base_cmd = "uv run --quiet src/train.py -m"
+
         # 基本参数
         cmd_parts = [base_cmd]
         
