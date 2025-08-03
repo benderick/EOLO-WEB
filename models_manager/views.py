@@ -251,17 +251,25 @@ class CreateFileAPIView(View):
             if parent_path:
                 full_path = f"{parent_path}/{file_name}"
             else:
-                full_path = file_name
+                # 当没有指定父路径时，默认创建在用户文件夹中
+                username = request.user.username
+                full_path = f"{username}/{file_name}"
             
-            success, message = model_file_manager.save_file_content(
+            success = model_file_manager.save_file_content(
                 full_path, file_content, request.user.username
             )
             
-            return JsonResponse({
-                'success': success,
-                'message': message,
-                'path': full_path
-            })
+            if success:
+                return JsonResponse({
+                    'success': True,
+                    'message': '文件创建成功',
+                    'path': full_path
+                })
+            else:
+                return JsonResponse({
+                    'success': False,
+                    'error': '文件创建失败'
+                })
             
         except json.JSONDecodeError:
             return JsonResponse({

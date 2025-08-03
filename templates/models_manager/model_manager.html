@@ -5,6 +5,9 @@
 
 {% block extra_css %}
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+<!-- CodeMirror CSS -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/theme/monokai.min.css">
 <!-- Prism.js CSS for syntax highlighting - 使用深色主题 -->
 <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet">
 <!-- 强制刷新样式缓存 v2.0 -->
@@ -238,6 +241,67 @@
     .code-editor:focus {
         background: #2d3748;
         box-shadow: inset 0 0 0 2px #4a5568;
+    }
+    
+    /* CodeMirror 编辑器容器样式 */
+    .code-editor-container {
+        width: 100%;
+        height: 100%;
+        position: relative;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    /* 编辑器模式指示器 */
+    .editor-mode-indicator {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        z-index: 10;
+        background: rgba(0,0,0,0.7);
+        color: white;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        pointer-events: none;
+    }
+    
+    .readonly-mode .editor-mode-indicator {
+        background: rgba(59, 130, 246, 0.8);
+    }
+    
+    .edit-mode .editor-mode-indicator {
+        background: rgba(34, 197, 94, 0.8);
+    }
+    
+    /* CodeMirror 自定义样式 */
+    .CodeMirror {
+        height: 100%;
+        font-family: 'JetBrains Mono', 'Fira Code', 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        font-size: 14px;
+        line-height: 1.6;
+        background: #272822;
+        color: #f8f8f2;
+    }
+    
+    .CodeMirror-scroll {
+        padding: 16px;
+    }
+    
+    .CodeMirror.cm-s-monokai.CodeMirror-focused .CodeMirror-selected {
+        background: rgba(73, 72, 62, 0.6);
+    }
+    
+    .CodeMirror-readonly .CodeMirror-cursor {
+        display: none !important;
+    }
+    
+    .CodeMirror-readonly .CodeMirror-activeline-background {
+        background: transparent !important;
     }
     
     /* 只读模式语法高亮容器 - 简洁优雅 */
@@ -626,6 +690,23 @@
                             <p>在左侧文件树中点击文件可查看和编辑内容</p>
                         </div>
                         
+                        <!-- CodeMirror 编辑器容器 - 只读模式 -->
+                        <div id="code-editor-readonly" class="code-editor-container readonly-mode" style="display: none;">
+                            <div class="editor-mode-indicator">
+                                <i class="fas fa-eye"></i>
+                                <span>只读模式</span>
+                            </div>
+                        </div>
+                        
+                        <!-- CodeMirror 编辑器容器 - 编辑模式 -->
+                        <div id="code-editor-editable" class="code-editor-container edit-mode" style="display: none;">
+                            <div class="editor-mode-indicator">
+                                <i class="fas fa-edit"></i>
+                                <span>编辑模式</span>
+                            </div>
+                        </div>
+                        
+                        <!-- 备用的传统 textarea（向后兼容） -->
                         <textarea id="code-editor" class="code-editor" style="display: none;" placeholder="在这里编辑文件内容..."></textarea>
                     </div>
                 </div>
@@ -697,7 +778,25 @@
                             <p>在左侧文件树中点击文件可查看和编辑参数配置</p>
                         </div>
                         
+                        <!-- CodeMirror 编辑器容器 - 只读模式 -->
+                        <div id="setting-code-editor-readonly" class="code-editor-container readonly-mode" style="display: none;">
+                            <div class="editor-mode-indicator">
+                                <i class="fas fa-eye"></i>
+                                <span>只读模式</span>
+                            </div>
+                        </div>
+                        
+                        <!-- CodeMirror 编辑器容器 - 编辑模式 -->
+                        <div id="setting-code-editor-editable" class="code-editor-container edit-mode" style="display: none;">
+                            <div class="editor-mode-indicator">
+                                <i class="fas fa-edit"></i>
+                                <span>编辑模式</span>
+                            </div>
+                        </div>
+                        
+                        <!-- 备用的传统 textarea（向后兼容） -->
                         <textarea id="setting-code-editor" class="code-editor" style="display: none;" placeholder="在这里编辑参数配置内容..."></textarea>
+                    </div>
                     </div>
                 </div>
             </div>
@@ -883,10 +982,19 @@ let contextMenuTarget = null;
 let fileTreeData = null;
 let hasUnsavedChanges = false;
 
+// CodeMirror 编辑器实例
+let readonlyEditor = null;
+let editableEditor = null;
+let settingReadonlyEditor = null;
+let settingEditableEditor = null;
+
 // 页面加载时初始化
 $(document).ready(function() {
     console.log('页面已加载，开始初始化...');
     $('#debug-info').text('正在初始化...');
+    
+    // 初始化 CodeMirror 编辑器
+    initializeCodeMirrorEditors();
     
     loadFileTree();
     
@@ -920,6 +1028,165 @@ $(document).ready(function() {
         }
     });
 });
+
+// 初始化 CodeMirror 编辑器
+function initializeCodeMirrorEditors() {
+    // 模型配置编辑器 - 只读模式
+    readonlyEditor = CodeMirror(document.getElementById('code-editor-readonly'), {
+        theme: 'monokai',
+        lineNumbers: true,
+        readOnly: true,
+        cursorBlinkRate: -1, // 隐藏光标
+        lineWrapping: true,
+        foldGutter: true,
+        gutters: ["CodeMirror-linenumbers", "CodeMirror-foldgutter"],
+        extraKeys: {
+            "F11": function(cm) {
+                cm.setOption("fullScreen", !cm.getOption("fullScreen"));
+            },
+            "Esc": function(cm) {
+                if (cm.getOption("fullScreen")) cm.setOption("fullScreen", false);
+            }
+        }
+    });
+    
+    // 模型配置编辑器 - 编辑模式
+    editableEditor = CodeMirror(document.getElementById('code-editor-editable'), {
+        theme: 'monokai',
+        lineNumbers: true,
+        readOnly: false,
+        lineWrapping: true,
+        indentUnit: 4,
+        smartIndent: true,
+        electricChars: true,
+        autoCloseBrackets: true,
+        matchBrackets: true,
+        showCursorWhenSelecting: true,
+        foldGutter: true,
+        gutters: ["CodeMirror-linenumbers", "CodeMirror-foldgutter"],
+        extraKeys: {
+            "Ctrl-S": function(cm) {
+                saveFile();
+            },
+            "F11": function(cm) {
+                cm.setOption("fullScreen", !cm.getOption("fullScreen"));
+            },
+            "Esc": function(cm) {
+                if (cm.getOption("fullScreen")) cm.setOption("fullScreen", false);
+            }
+        }
+    });
+    
+    // 参数配置编辑器 - 只读模式
+    settingReadonlyEditor = CodeMirror(document.getElementById('setting-code-editor-readonly'), {
+        theme: 'monokai',
+        lineNumbers: true,
+        readOnly: true,
+        cursorBlinkRate: -1,
+        lineWrapping: true,
+        foldGutter: true,
+        gutters: ["CodeMirror-linenumbers", "CodeMirror-foldgutter"],
+        extraKeys: {
+            "F11": function(cm) {
+                cm.setOption("fullScreen", !cm.getOption("fullScreen"));
+            },
+            "Esc": function(cm) {
+                if (cm.getOption("fullScreen")) cm.setOption("fullScreen", false);
+            }
+        }
+    });
+    
+    // 参数配置编辑器 - 编辑模式
+    settingEditableEditor = CodeMirror(document.getElementById('setting-code-editor-editable'), {
+        theme: 'monokai',
+        lineNumbers: true,
+        readOnly: false,
+        lineWrapping: true,
+        indentUnit: 4,
+        smartIndent: true,
+        electricChars: true,
+        autoCloseBrackets: true,
+        matchBrackets: true,
+        showCursorWhenSelecting: true,
+        foldGutter: true,
+        gutters: ["CodeMirror-linenumbers", "CodeMirror-foldgutter"],
+        extraKeys: {
+            "Ctrl-S": function(cm) {
+                saveSettingFile();
+            },
+            "F11": function(cm) {
+                cm.setOption("fullScreen", !cm.getOption("fullScreen"));
+            },
+            "Esc": function(cm) {
+                if (cm.getOption("fullScreen")) cm.setOption("fullScreen", false);
+            }
+        }
+    });
+    
+    // 监听编辑器内容变化
+    editableEditor.on('change', function(cm, change) {
+        if (currentFile && currentFile.isEditing) {
+            hasUnsavedChanges = true;
+        }
+    });
+    
+    settingEditableEditor.on('change', function(cm, change) {
+        if (currentSettingFile && currentSettingFile.isEditing) {
+            hasUnsavedChanges = true;
+        }
+    });
+}
+
+// 获取文件扩展名对应的 CodeMirror 模式
+function getCodeMirrorMode(filePath) {
+    const extension = filePath.toLowerCase().split('.').pop();
+    const modeMap = {
+        'py': 'python',
+        'python': 'python',
+        'yaml': 'yaml',
+        'yml': 'yaml',
+        'json': 'javascript',
+        'js': 'javascript',
+        'ts': 'javascript',
+        'html': 'xml',
+        'xml': 'xml',
+        'css': 'css',
+        'sh': 'shell',
+        'bash': 'shell',
+        'md': 'markdown',
+        'txt': 'text/plain',
+        'log': 'text/plain'
+    };
+    return modeMap[extension] || 'text/plain';
+}
+
+// 切换到只读模式
+function switchToReadonlyMode(isSettingEditor = false) {
+    if (isSettingEditor) {
+        $('#setting-code-editor-editable').hide();
+        $('#setting-code-editor-readonly').show();
+        settingReadonlyEditor.refresh();
+    } else {
+        $('#code-editor-editable').hide();
+        $('#code-editor-readonly').show();
+        readonlyEditor.refresh();
+    }
+}
+
+// 切换到编辑模式
+function switchToEditMode(isSettingEditor = false) {
+    if (isSettingEditor) {
+        $('#setting-code-editor-readonly').hide();
+        $('#setting-code-editor-editable').show();
+        settingEditableEditor.refresh();
+        settingEditableEditor.focus();
+    } else {
+        $('#code-editor-readonly').hide();
+        $('#code-editor-editable').show();
+        editableEditor.refresh();
+        editableEditor.focus();
+    }
+}
 
 // 加载文件树
 function loadFileTree() {
@@ -1093,11 +1360,6 @@ function loadFile(path, canEdit = false) {
         }
     }
     
-    // 先禁用之前的语法高亮
-    if (typeof syntaxHighlighter !== 'undefined') {
-        syntaxHighlighter.disable();
-    }
-    
     $.get('/models/api/file/', {path: path})
         .done(function(response) {
             if (response.success) {
@@ -1105,11 +1367,28 @@ function loadFile(path, canEdit = false) {
                     path: path,
                     canEdit: canEdit,
                     originalContent: response.data.content,
-                    isEditing: false // 新增状态标记，默认为只读模式
+                    isEditing: false // 默认为只读模式
                 };
                 
+                // 隐藏占位符
                 $('#editor-placeholder').hide();
-                $('#code-editor').show().val(response.data.content);
+                
+                // 隐藏传统编辑器
+                $('#code-editor').hide();
+                
+                // 设置 CodeMirror 模式
+                const mode = getCodeMirrorMode(path);
+                readonlyEditor.setOption('mode', mode);
+                editableEditor.setOption('mode', mode);
+                
+                // 设置内容
+                readonlyEditor.setValue(response.data.content);
+                editableEditor.setValue(response.data.content);
+                
+                // 默认显示只读模式
+                switchToReadonlyMode(false);
+                
+                // 显示编辑器头部
                 $('#editor-header').show();
                 $('#current-file-path').text(path);
                 
@@ -1130,15 +1409,7 @@ function loadFile(path, canEdit = false) {
                 
                 hasUnsavedChanges = false;
                 
-                // 默认设置为只读模式，启用语法高亮
-                $('#code-editor').prop('readonly', true);
-                
-                // 启用语法高亮 - 始终以只读模式显示
-                setTimeout(() => {
-                    if (window.Prism && typeof syntaxHighlighter !== 'undefined') {
-                        syntaxHighlighter.enable('code-editor', path, true); // 始终以只读模式启用语法高亮
-                    }
-                }, 100);
+                console.log('文件加载成功，显示只读模式');
             } else {
                 showError('加载文件失败: ' + response.error);
             }
@@ -1155,16 +1426,11 @@ function enterEditMode() {
         return;
     }
     
-    // 禁用语法高亮，切换到编辑模式
-    if (typeof syntaxHighlighter !== 'undefined') {
-        syntaxHighlighter.disable();
-    }
-    
     // 更新状态
     currentFile.isEditing = true;
     
-    // 设置为可编辑状态
-    $('#code-editor').prop('readonly', false).focus();
+    // 切换到编辑模式
+    switchToEditMode(false);
     
     // 更新按钮状态
     $('#edit-btn').hide();
@@ -1180,7 +1446,7 @@ function saveFile() {
         return;
     }
     
-    const content = $('#code-editor').val();
+    const content = editableEditor.getValue();
     
     $.ajax({
         url: '/models/api/file/',
@@ -1201,23 +1467,19 @@ function saveFile() {
             currentFile.originalContent = content;
             currentFile.isEditing = false;
             
+            // 同步内容到只读编辑器
+            readonlyEditor.setValue(content);
+            
             // 保存后切换回只读模式
-            $('#code-editor').prop('readonly', true);
+            switchToReadonlyMode(false);
             
             // 更新按钮状态
             $('#save-btn').hide();
             $('#edit-btn').show();
             
-            // 重新启用语法高亮
-            setTimeout(() => {
-                if (window.Prism && typeof syntaxHighlighter !== 'undefined') {
-                    syntaxHighlighter.enable('code-editor', currentFile.path, true);
-                }
-            }, 100);
-            
-            console.log('文件已保存，已切换回只读模式');
+            console.log('文件保存成功，切换回只读模式');
         } else {
-            showError('保存失败: ' + response.message);
+            showError('保存失败: ' + response.error);
         }
     })
     .fail(function() {
@@ -1448,15 +1710,16 @@ function submitCreateFolder() {
 // 清空编辑器
 // 清空编辑器
 function clearEditor() {
-    // 禁用语法高亮
-    if (typeof syntaxHighlighter !== 'undefined') {
-        syntaxHighlighter.disable();
-    }
-    
     currentFile = null;
     hasUnsavedChanges = false;
-    $('#editor-placeholder').show();
+    
+    // 隐藏所有编辑器容器
+    $('#code-editor-readonly').hide();
+    $('#code-editor-editable').hide();
     $('#code-editor').hide().val('');
+    
+    // 显示占位符
+    $('#editor-placeholder').show();
     $('#editor-header').hide();
     $('#save-btn').hide();
     $('#edit-btn').hide();
@@ -1677,11 +1940,6 @@ function loadSettingFile(path, canEdit = false) {
         }
     }
     
-    // 先禁用之前的语法高亮
-    if (typeof syntaxHighlighter !== 'undefined') {
-        syntaxHighlighter.disable();
-    }
-    
     $.get('/models/api/settings/file/', {path: path})
         .done(function(response) {
             if (response.success) {
@@ -1689,11 +1947,28 @@ function loadSettingFile(path, canEdit = false) {
                     path: path,
                     canEdit: canEdit,
                     originalContent: response.data.content,
-                    isEditing: false // 新增状态标记，默认为只读模式
+                    isEditing: false // 默认为只读模式
                 };
                 
+                // 隐藏占位符
                 $('#setting-editor-placeholder').hide();
-                $('#setting-code-editor').show().val(response.data.content);
+                
+                // 隐藏传统编辑器
+                $('#setting-code-editor').hide();
+                
+                // 设置 CodeMirror 模式
+                const mode = getCodeMirrorMode(path);
+                settingReadonlyEditor.setOption('mode', mode);
+                settingEditableEditor.setOption('mode', mode);
+                
+                // 设置内容
+                settingReadonlyEditor.setValue(response.data.content);
+                settingEditableEditor.setValue(response.data.content);
+                
+                // 默认显示只读模式
+                switchToReadonlyMode(true);
+                
+                // 显示编辑器头部
                 $('#setting-editor-header').show();
                 $('#setting-current-file-path').text(path);
                 
@@ -1707,15 +1982,7 @@ function loadSettingFile(path, canEdit = false) {
                 
                 hasUnsavedSettingChanges = false;
                 
-                // 默认设置为只读模式，启用语法高亮
-                $('#setting-code-editor').prop('readonly', true);
-                
-                // 启用语法高亮 - 始终以只读模式显示
-                setTimeout(() => {
-                    if (window.Prism && typeof syntaxHighlighter !== 'undefined') {
-                        syntaxHighlighter.enable('setting-code-editor', path, true); // 始终以只读模式启用语法高亮
-                    }
-                }, 100);
+                console.log('参数配置文件加载成功，显示只读模式');
             } else {
                 showError('加载参数配置文件失败: ' + response.error);
             }
@@ -1732,16 +1999,11 @@ function enterSettingEditMode() {
         return;
     }
     
-    // 禁用语法高亮，切换到编辑模式
-    if (typeof syntaxHighlighter !== 'undefined') {
-        syntaxHighlighter.disable();
-    }
-    
     // 更新状态
     currentSettingFile.isEditing = true;
     
-    // 设置为可编辑状态
-    $('#setting-code-editor').prop('readonly', false).focus();
+    // 切换到编辑模式
+    switchToEditMode(true);
     
     // 更新按钮状态
     $('#setting-edit-btn').hide();
@@ -1757,7 +2019,7 @@ function saveSettingFile() {
         return;
     }
     
-    const content = $('#setting-code-editor').val();
+    const content = settingEditableEditor.getValue();
     
     $.ajax({
         url: '/models/api/settings/file/',
@@ -1778,21 +2040,17 @@ function saveSettingFile() {
             currentSettingFile.originalContent = content;
             currentSettingFile.isEditing = false;
             
+            // 同步内容到只读编辑器
+            settingReadonlyEditor.setValue(content);
+            
             // 保存后切换回只读模式
-            $('#setting-code-editor').prop('readonly', true);
+            switchToReadonlyMode(true);
             
             // 更新按钮状态
             $('#setting-save-btn').hide();
             $('#setting-edit-btn').show();
             
-            // 重新启用语法高亮
-            setTimeout(() => {
-                if (window.Prism && typeof syntaxHighlighter !== 'undefined') {
-                    syntaxHighlighter.enable('setting-code-editor', currentSettingFile.path, true);
-                }
-            }, 100);
-            
-            console.log('参数配置文件已保存，已切换回只读模式');
+            console.log('参数配置文件保存成功，切换回只读模式');
         } else {
             showError('保存失败: ' + response.message);
         }
@@ -1928,36 +2186,24 @@ function submitCreateSettingFolder() {
 // 清空参数配置编辑器
 // 清空参数配置编辑器
 function clearSettingEditor() {
-    // 禁用语法高亮
-    if (typeof syntaxHighlighter !== 'undefined') {
-        syntaxHighlighter.disable();
-    }
-    
     currentSettingFile = null;
     hasUnsavedSettingChanges = false;
-    $('#setting-editor-placeholder').show();
+    
+    // 隐藏所有编辑器容器
+    $('#setting-code-editor-readonly').hide();
+    $('#setting-code-editor-editable').hide();
     $('#setting-code-editor').hide().val('');
+    
+    // 显示占位符
+    $('#setting-editor-placeholder').show();
     $('#setting-editor-header').hide();
     $('#setting-save-btn').hide();
     $('#setting-edit-btn').hide();
     $('.tree-node[data-type="setting"]').removeClass('active');
 }
 
-// 监听参数配置编辑器内容变化
+// 监听参数配置编辑器内容变化（CodeMirror 已在初始化中处理）
 $(document).ready(function() {
-    $('#setting-code-editor').on('input', function() {
-        if (currentSettingFile && currentSettingFile.isEditing) {
-            hasUnsavedSettingChanges = true;
-        }
-    });
-    
-    // 监听模型配置编辑器内容变化
-    $('#code-editor').on('input', function() {
-        if (currentFile && currentFile.isEditing) {
-            hasUnsavedChanges = true;
-        }
-    });
-    
     // 监听选项卡切换事件
     $('#setting-tab').on('shown.bs.tab', function (e) {
         // 当切换到参数配置选项卡时，加载参数配置文件树
@@ -2253,6 +2499,15 @@ function testModel() {
     });
 }
 </script>
+
+<!-- CodeMirror JavaScript -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/mode/python/python.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/mode/yaml/yaml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/mode/javascript/javascript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/mode/xml/xml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/mode/css/css.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/mode/shell/shell.min.js"></script>
 
 <!-- Prism.js for syntax highlighting -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
