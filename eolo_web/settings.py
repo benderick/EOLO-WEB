@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'experiments',
     'datasets',
     'models_manager',
+    'modules',  # 模块化管理应用
 ]
 
 MIDDLEWARE = [
@@ -207,6 +208,8 @@ EOLO_DATASETS_CONFIGS_DIR = EOLO_CONFIGS_DIR / 'data'
 EOLO_API_DIR = EOLO_DIR / 'api'
 EOLO_MODEL_TEST_SCRIPT = EOLO_API_DIR / 'model_test.py'
 EOLO_PATHS_JSON = EOLO_API_DIR / 'paths.json'
+
+EOLO_ULTRALYTICS_WORKPIECES_DIR = Path('/icislab/volume3/benderick/futurama/EOLO-ultralytics/ultralytics/nn/workpieces')
 
 # 模型测试配置
 MODEL_TEST_CONFIG = {

@@ -1,0 +1,52 @@
+{% load module_filters %}
+
+<!-- 显示根目录文件（如果有的话） -->
+{% if tree.files %}
+    {% for file in tree.files %}
+        <div class="tree-item tree-file" 
+             data-path="{{ file.relative_path }}" 
+             style="padding-left: {{ level|mul:20 }}px;"
+             onclick="openFile('{{ file.relative_path }}')">
+            <i class="fas fa-file-code text-success"></i> {{ file.name }}
+            <small class="text-muted ms-2">({{ file.size|filesizeformat }})</small>
+        </div>
+    {% endfor %}
+{% endif %}
+
+<!-- 显示子目录 -->
+{% for key, node in tree.items %}
+    {% if key != 'files' and node.type == 'directory' %}
+        <div class="tree-item tree-directory" 
+             data-path="{{ node.name }}" 
+             data-toggle="collapse"
+             data-target="#dir-{{ key|slugify }}-{{ level }}"
+             style="padding-left: {{ level|mul:20 }}px;"
+             onclick="toggleDirectory(this)">
+            <i class="fas fa-folder directory-icon"></i> {{ node.name }}
+            {% if node.children or node.files %}
+                <i class="fas fa-chevron-right toggle-icon float-end me-2"></i>
+            {% endif %}
+        </div>
+        
+        <!-- 目录内容（默认折叠） -->
+        <div class="collapse directory-content" id="dir-{{ key|slugify }}-{{ level }}">
+            <!-- 显示当前目录的文件 -->
+            {% if node.files %}
+                {% for file in node.files %}
+                    <div class="tree-item tree-file" 
+                         data-path="{{ file.relative_path }}" 
+                         style="padding-left: {{ level|add:1|mul:20 }}px;"
+                         onclick="openFile('{{ file.relative_path }}')">
+                        <i class="fas fa-file-code text-success"></i> {{ file.name }}
+                        <small class="text-muted ms-2">({{ file.size|filesizeformat }})</small>
+                    </div>
+                {% endfor %}
+            {% endif %}
+            
+            <!-- 递归显示子目录 -->
+            {% if node.children %}
+                {% include 'modules/partials/file_tree_node.html' with tree=node.children level=level|add:1 %}
+            {% endif %}
+        </div>
+    {% endif %}
+{% endfor %}

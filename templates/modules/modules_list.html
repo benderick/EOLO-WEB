@@ -1,0 +1,491 @@
+{% extends 'base.html' %}
+{% load module_filters %}
+
+{% block title %}模块管理{% endblock %}
+
+{% block extra_css %}
+<style>
+/* 文件树样式 */
+.file-tree {
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+}
+
+.tree-item {
+    padding: 4px 8px;
+    margin: 2px 0;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.tree-item:hover {
+    background-color: #f8f9fa;
+}
+
+.tree-item.selected {
+    background-color: #e3f2fd;
+    color: #1976d2;
+}
+
+.tree-directory {
+    font-weight: bold;
+    color: #2196f3;
+    position: relative;
+}
+
+.tree-directory:hover {
+    background-color: #e3f2fd;
+}
+
+.toggle-icon {
+    transition: transform 0.2s ease;
+    font-size: 12px;
+    color: #666;
+}
+
+.directory-content {
+    transition: all 0.3s ease;
+    overflow: hidden;
+}
+
+.directory-content.show {
+    display: block !important;
+}
+
+.directory-icon {
+    margin-right: 5px;
+    transition: color 0.2s ease;
+}
+
+.tree-file {
+    color: #4caf50;
+    padding-left: 20px;
+}
+
+.tree-file:before {
+    content: "📄 ";
+    margin-right: 5px;
+}
+
+.tree-directory:before {
+    content: "📁 ";
+    margin-right: 5px;
+}
+
+.tree-directory.expanded:before {
+    content: "📂 ";
+}
+
+/* 拖拽上传区域 */
+.upload-drop-zone {
+    border: 2px dashed #ccc;
+    border-radius: 8px;
+    padding: 40px;
+    text-align: center;
+    background-color: #fafafa;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.upload-drop-zone:hover {
+    border-color: #2196f3;
+    background-color: #f0f8ff;
+}
+
+.upload-drop-zone.dragover {
+    border-color: #4caf50;
+    background-color: #e8f5e8;
+}
+
+/* 文件信息卡片 */
+.file-info-card {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 15px;
+}
+
+.stats-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 10px;
+    padding: 20px;
+}
+
+/* 代码编辑器按钮 */
+.editor-btn {
+    background: linear-gradient(45deg, #4caf50, #45a049);
+    border: none;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 12px;
+    transition: all 0.3s;
+}
+
+.editor-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(76, 175, 80, 0.3);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <!-- 左侧文件树 -->
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-code me-2"></i>模块文件树
+                        <button id="refreshTreeBtn" class="btn btn-sm btn-outline-light float-end">
+                            <i class="fas fa-sync-alt"></i> 刷新
+                        </button>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <!-- 统计信息 -->
+                    <div class="stats-card mb-4">
+                        <div class="row text-center">
+                            <div class="col-md-4">
+                                <h4>{{ stats.total_files }}</h4>
+                                <small>Python文件</small>
+                            </div>
+                            <div class="col-md-4">
+                                <h4>{{ stats.total_directories }}</h4>
+                                <small>目录</small>
+                            </div>
+                            <div class="col-md-4">
+                                <h4>{{ stats.total_size|filesizeformat }}</h4>
+                                <small>总大小</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 文件树 -->
+                    <div class="file-tree" id="fileTree">
+                        {% if file_tree %}
+                            <div class="tree-item tree-directory" data-path="">
+                                <i class="fas fa-folder-open"></i> 工作目录
+                                <small class="text-muted ms-2">{{ workpieces_dir }}</small>
+                            </div>
+                            <div id="treeContent">
+                                {% include 'modules/partials/file_tree_node.html' with tree=file_tree level=1 %}
+                            </div>
+                        {% else %}
+                            <div class="text-center text-muted py-4">
+                                <i class="fas fa-folder-open fa-3x mb-3"></i>
+                                <p>没有找到Python文件</p>
+                                <p class="small">工作目录: {{ workpieces_dir }}</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 右侧操作面板 -->
+        <div class="col-md-4">
+            <!-- 文件上传 -->
+            <div class="card mb-4">
+                <div class="card-header bg-success text-white">
+                    <h6 class="mb-0">
+                        <i class="fas fa-upload me-2"></i>上传模块文件
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <form id="uploadForm" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        
+                        <!-- 目录选择 -->
+                        <div class="mb-3">
+                            <label for="targetDirectory" class="form-label">目标目录</label>
+                            <select class="form-select" id="targetDirectory" name="directory">
+                                {% for dir in directories %}
+                                    <option value="{{ dir.path }}" 
+                                            style="padding-left: {{ dir.depth|mul:20 }}px;">
+                                        {{ dir.display_name }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <!-- 拖拽上传区域 -->
+                        <div class="upload-drop-zone" id="uploadDropZone">
+                            <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+                            <p class="mb-2">拖拽Python文件到此处</p>
+                            <p class="small text-muted">或点击选择文件</p>
+                            <input type="file" 
+                                   id="fileInput" 
+                                   name="file" 
+                                   accept=".py" 
+                                   style="display: none;">
+                        </div>
+                        
+                        <div class="mt-3">
+                            <button type="submit" class="btn btn-success w-100">
+                                <i class="fas fa-upload me-2"></i>上传文件
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- 选中文件信息 -->
+            <div class="card" id="fileInfoCard" style="display: none;">
+                <div class="card-header bg-info text-white">
+                    <h6 class="mb-0">
+                        <i class="fas fa-info-circle me-2"></i>文件信息
+                    </h6>
+                </div>
+                <div class="card-body" id="fileInfoContent">
+                    <!-- 动态加载文件信息 -->
+                </div>
+            </div>
+            
+            <!-- 帮助信息 -->
+            <div class="card">
+                <div class="card-header bg-warning text-dark">
+                    <h6 class="mb-0">
+                        <i class="fas fa-question-circle me-2"></i>使用说明
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <ul class="list-unstyled small">
+                        <li><i class="fas fa-check text-success me-2"></i>点击文件名可以查看和编辑</li>
+                        <li><i class="fas fa-check text-success me-2"></i>支持拖拽上传.py文件</li>
+                        <li><i class="fas fa-check text-success me-2"></i>文件会自动保存到选择的目录</li>
+                        <li><i class="fas fa-check text-success me-2"></i>支持语法高亮和代码补全</li>
+                        <li><i class="fas fa-exclamation-triangle text-warning me-2"></i>只能上传Python文件(.py)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 上传进度模态框 -->
+<div class="modal fade" id="uploadModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-body text-center">
+                <div class="spinner-border text-primary mb-3" role="status">
+                    <span class="visually-hidden">上传中...</span>
+                </div>
+                <p>正在上传文件...</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 文件树交互
+document.addEventListener('DOMContentLoaded', function() {
+    const fileTree = document.getElementById('fileTree');
+    const fileInfoCard = document.getElementById('fileInfoCard');
+    const fileInfoContent = document.getElementById('fileInfoContent');
+    const uploadForm = document.getElementById('uploadForm');
+    const uploadDropZone = document.getElementById('uploadDropZone');
+    const fileInput = document.getElementById('fileInput');
+    const uploadModal = new bootstrap.Modal(document.getElementById('uploadModal'));
+    
+    // 文件树点击事件
+    fileTree.addEventListener('click', function(e) {
+        const treeItem = e.target.closest('.tree-item');
+        if (!treeItem) return;
+        
+        // 移除之前的选中状态
+        document.querySelectorAll('.tree-item.selected').forEach(item => {
+            item.classList.remove('selected');
+        });
+        
+        // 添加选中状态
+        treeItem.classList.add('selected');
+        
+        const filePath = treeItem.dataset.path;
+        const isFile = treeItem.classList.contains('tree-file');
+        
+        if (isFile && filePath) {
+            // 显示文件信息
+            showFileInfo(filePath, treeItem.textContent.trim());
+        } else if (treeItem.classList.contains('tree-directory')) {
+            // 展开/折叠目录
+            toggleDirectory(treeItem);
+        }
+    });
+    
+    // 显示文件信息
+    function showFileInfo(filePath, fileName) {
+        fileInfoContent.innerHTML = `
+            <div class="file-info-card">
+                <h6><i class="fas fa-file-code text-success me-2"></i>${fileName}</h6>
+                <p class="small text-muted mb-2">${filePath}</p>
+                <div class="d-grid gap-2">
+                    <a href="/modules/file/${filePath.replace(/\//g, '__')}/" 
+                       class="btn btn-primary btn-sm">
+                        <i class="fas fa-edit me-2"></i>编辑文件
+                    </a>
+                    <button class="btn btn-danger btn-sm" onclick="deleteFile('${filePath}')">
+                        <i class="fas fa-trash me-2"></i>删除文件
+                    </button>
+                </div>
+            </div>
+        `;
+        fileInfoCard.style.display = 'block';
+    }
+    
+    // 展开/折叠目录
+    function toggleDirectory(dirItem) {
+        const isExpanded = dirItem.classList.contains('expanded');
+        if (isExpanded) {
+            dirItem.classList.remove('expanded');
+        } else {
+            dirItem.classList.add('expanded');
+        }
+    }
+    
+    // 拖拽上传
+    uploadDropZone.addEventListener('click', () => fileInput.click());
+    
+    uploadDropZone.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        this.classList.add('dragover');
+    });
+    
+    uploadDropZone.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        this.classList.remove('dragover');
+    });
+    
+    uploadDropZone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        this.classList.remove('dragover');
+        
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            fileInput.files = files;
+            uploadForm.dispatchEvent(new Event('submit'));
+        }
+    });
+    
+    // 上传表单提交
+    uploadForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const file = fileInput.files[0];
+        
+        if (!file) {
+            alert('请选择要上传的文件');
+            return;
+        }
+        
+        if (!file.name.endsWith('.py')) {
+            alert('只能上传Python文件(.py)');
+            return;
+        }
+        
+        uploadModal.show();
+        
+        fetch('/modules/api/upload/', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            uploadModal.hide();
+            
+            if (data.success) {
+                alert(data.message);
+                location.reload(); // 刷新页面显示新文件
+            } else {
+                alert('上传失败: ' + data.error);
+            }
+        })
+        .catch(error => {
+            uploadModal.hide();
+            console.error('上传错误:', error);
+            alert('上传失败: 网络错误');
+        });
+    });
+    
+    // 刷新文件树
+    document.getElementById('refreshTreeBtn').addEventListener('click', function() {
+        location.reload();
+    });
+});
+
+// 删除文件
+function deleteFile(filePath) {
+    if (!confirm(`确认删除文件: ${filePath}？`)) {
+        return;
+    }
+    
+    fetch('/modules/api/delete/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify({
+            path: filePath
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            location.reload();
+        } else {
+            alert('删除失败: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('删除错误:', error);
+        alert('删除失败: 网络错误');
+    });
+}
+
+// 切换目录展开/折叠
+function toggleDirectory(element) {
+    event.stopPropagation(); // 防止事件冒泡
+    
+    const targetId = element.getAttribute('data-target');
+    const target = document.querySelector(targetId);
+    const toggleIcon = element.querySelector('.toggle-icon');
+    const directoryIcon = element.querySelector('.directory-icon');
+    
+    if (target) {
+        // 使用Bootstrap的collapse方法
+        if (target.classList.contains('show')) {
+            target.classList.remove('show');
+            toggleIcon.classList.remove('fa-chevron-down');
+            toggleIcon.classList.add('fa-chevron-right');
+            directoryIcon.classList.remove('fa-folder-open');
+            directoryIcon.classList.add('fa-folder');
+        } else {
+            target.classList.add('show');
+            toggleIcon.classList.remove('fa-chevron-right');
+            toggleIcon.classList.add('fa-chevron-down');
+            directoryIcon.classList.remove('fa-folder');
+            directoryIcon.classList.add('fa-folder-open');
+        }
+    }
+}
+
+// 打开文件进行编辑
+function openFile(filePath) {
+    event.stopPropagation(); // 防止事件冒泡
+    
+    // 跳转到文件编辑页面
+    window.location.href = `/modules/edit/${encodeURIComponent(filePath)}/`;
+}
+</script>
+{% endblock %}

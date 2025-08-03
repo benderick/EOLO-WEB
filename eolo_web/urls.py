@@ -29,4 +29,5 @@ urlpatterns = [
     path('experiments/', include('experiments.urls')),
     path('datasets/', include('datasets.urls')),
     path('models/', include('models_manager.urls')),
+    path('modules/', include('modules.urls')),  # 模块管理
 ]

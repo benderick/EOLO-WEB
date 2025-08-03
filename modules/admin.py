@@ -1,0 +1,34 @@
+"""
+模块管理 Django Admin 配置
+"""
+from django.contrib import admin
+from .models import ModuleFile, ModuleEditSession
+
+
+@admin.register(ModuleFile)
+class ModuleFileAdmin(admin.ModelAdmin):
+    """模块文件管理"""
+    list_display = ('name', 'relative_path', 'size', 'uploaded_by', 'created_at', 'updated_at')
+    list_filter = ('created_at', 'updated_at', 'uploaded_by')
+    search_fields = ('name', 'relative_path')
+    readonly_fields = ('content_hash', 'created_at', 'updated_at')
+    ordering = ['relative_path']
+    
+    fieldsets = (
+        ('基本信息', {
+            'fields': ('name', 'relative_path', 'size')
+        }),
+        ('元数据', {
+            'fields': ('uploaded_by', 'content_hash', 'created_at', 'updated_at')
+        }),
+    )
+
+
+@admin.register(ModuleEditSession)
+class ModuleEditSessionAdmin(admin.ModelAdmin):
+    """编辑会话管理"""
+    list_display = ('module_file', 'user', 'started_at', 'last_activity', 'is_active')
+    list_filter = ('is_active', 'started_at', 'last_activity')
+    search_fields = ('module_file__name', 'user__username')
+    readonly_fields = ('started_at',)
+    ordering = ['-last_activity']

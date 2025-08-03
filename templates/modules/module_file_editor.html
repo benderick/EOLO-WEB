@@ -1,0 +1,492 @@
+{% extends 'base.html' %}
+
+{% block title %}编辑模块 - {{ file_name }}{% endblock %}
+
+{% block extra_css %}
+<!-- CodeMirror CSS -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/theme/monokai.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/addon/hint/show-hint.min.css">
+
+<style>
+.CodeMirror {
+    height: 600px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+}
+
+.editor-toolbar {
+    background: #f8f9fa;
+    border: 1px solid #ddd;
+    border-bottom: none;
+    border-radius: 4px 4px 0 0;
+    padding: 8px 12px;
+}
+
+.editor-container {
+    position: relative;
+}
+
+.file-info-bar {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.save-status {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+    padding: 10px 15px;
+    border-radius: 20px;
+    color: white;
+    font-weight: bold;
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+.save-status.show {
+    opacity: 1;
+}
+
+.save-status.success {
+    background: #4caf50;
+}
+
+.save-status.error {
+    background: #f44336;
+}
+
+.editing-warning {
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    color: #856404;
+    padding: 12px;
+    border-radius: 6px;
+    margin-bottom: 15px;
+}
+
+.readonly-mode .CodeMirror {
+    background-color: #2f3129 !important; /* 保持monokai主题的深色背景 */
+    cursor: default;
+    opacity: 1; /* 稍微透明一点表示只读 */
+}
+
+.edit-mode .CodeMirror {
+    background-color: #272822 !important; /* monokai主题原始背景色 */
+    border-color: #28a745 !important;
+    box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.25);
+    opacity: 1; /* 完全不透明表示可编辑 */
+}
+
+.mode-indicator {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: bold;
+    z-index: 10;
+}
+
+.mode-indicator.readonly {
+    background: rgba(108, 117, 125, 0.9);
+    color: white;
+    border: 1px solid #6c757d;
+}
+
+.mode-indicator.editing {
+    background: rgba(40, 167, 69, 0.9);
+    color: white;
+    border: 1px solid #28a745;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.7; }
+    100% { opacity: 1; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <!-- 文件信息 -->
+            <div class="file-info-bar">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <h4>
+                            <i class="fas fa-file-code me-2"></i>{{ file_name }}
+                        </h4>
+                        <p class="mb-0">
+                            <i class="fas fa-folder me-2"></i>{{ file_path }}
+                            <span class="ms-3">
+                                <i class="fas fa-weight me-1"></i>{{ file_size|filesizeformat }}
+                            </span>
+                        </p>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <a href="{% url 'modules:list' %}" class="btn btn-outline-light me-2">
+                            <i class="fas fa-arrow-left me-1"></i>返回列表
+                        </a>
+                        <button id="editBtn" class="btn btn-warning me-2" {% if not can_edit %}disabled title="文件正在被其他用户编辑"{% endif %}>
+                            <i class="fas fa-edit me-1"></i>编辑
+                        </button>
+                        <button id="saveBtn" class="btn btn-success" style="display: none;">
+                            <i class="fas fa-save me-1"></i>保存
+                        </button>
+                        <button id="cancelBtn" class="btn btn-secondary" style="display: none;">
+                            <i class="fas fa-times me-1"></i>取消
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 编辑冲突警告 -->
+            {% if active_sessions %}
+                <div class="editing-warning">
+                    <h6><i class="fas fa-exclamation-triangle me-2"></i>编辑冲突警告</h6>
+                    <p class="mb-2">以下用户正在编辑此文件：</p>
+                    <ul class="mb-0">
+                        {% for session in active_sessions %}
+                            <li>{{ session.user.username }} ({{ session.last_activity|timesince }}前)</li>
+                        {% endfor %}
+                    </ul>
+                    <p class="mb-0 mt-2"><strong>为避免冲突，建议等待其他用户完成编辑后再进行修改。</strong></p>
+                </div>
+            {% endif %}
+            
+            <!-- 编辑器 -->
+            <div class="card">
+                <div class="editor-toolbar">
+                    <div class="row align-items-center">
+                        <div class="col-md-6">
+                            <small class="text-muted">
+                                <i class="fas fa-keyboard me-1"></i>
+                                快捷键: Ctrl+S 保存, Ctrl+F 查找, Ctrl+Space 代码补全
+                            </small>
+                        </div>
+                        <div class="col-md-6 text-end">
+                            <div class="btn-group btn-group-sm" role="group">
+                                <button type="button" class="btn btn-outline-secondary" id="formatBtn">
+                                    <i class="fas fa-code me-1"></i>格式化
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" id="findBtn">
+                                    <i class="fas fa-search me-1"></i>查找
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" id="fullscreenBtn">
+                                    <i class="fas fa-expand me-1"></i>全屏
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="editor-container readonly-mode" id="editorContainer">
+                    <div class="mode-indicator readonly" id="modeIndicator">只读模式</div>
+                    <textarea id="codeEditor">{{ file_content }}</textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 保存状态提示 -->
+<div id="saveStatus" class="save-status">
+    <span id="saveStatusText"></span>
+</div>
+
+<!-- 确认离开对话框 -->
+<div class="modal fade" id="confirmLeaveModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">确认离开</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>文件有未保存的更改，确认要离开吗？</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="confirmLeaveBtn">确认离开</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- CodeMirror JavaScript -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/mode/python/python.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/addon/hint/show-hint.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/addon/hint/python-hint.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/addon/search/searchcursor.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/addon/search/search.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/addon/dialog/dialog.min.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    let isEditMode = false;
+    let isModified = false;
+    let originalContent = '';
+    
+    // 初始化CodeMirror编辑器（只读模式）
+    const editor = CodeMirror.fromTextArea(document.getElementById('codeEditor'), {
+        mode: 'python',
+        theme: 'monokai',
+        lineNumbers: true,
+        indentUnit: 4,
+        indentWithTabs: false,
+        readOnly: true,  // 默认只读
+        extraKeys: {
+            "Ctrl-Space": "autocomplete",
+            "Ctrl-S": function(cm) {
+                if (isEditMode) saveFile();
+            },
+            "F11": function(cm) {
+                cm.setOption("fullScreen", !cm.getOption("fullScreen"));
+            },
+            "Esc": function(cm) {
+                if (cm.getOption("fullScreen")) cm.setOption("fullScreen", false);
+            }
+        },
+        hintOptions: {
+            hint: CodeMirror.hint.python
+        }
+    });
+    
+    originalContent = editor.getValue();
+    
+    // 获取元素
+    const editBtn = document.getElementById('editBtn');
+    const saveBtn = document.getElementById('saveBtn');
+    const cancelBtn = document.getElementById('cancelBtn');
+    const editorContainer = document.getElementById('editorContainer');
+    const modeIndicator = document.getElementById('modeIndicator');
+    
+    // 切换到编辑模式
+    function enterEditMode() {
+        isEditMode = true;
+        editor.setOption('readOnly', false);
+        editor.focus();
+        
+        // 更新按钮显示
+        editBtn.style.display = 'none';
+        saveBtn.style.display = 'inline-block';
+        cancelBtn.style.display = 'inline-block';
+        
+        // 更新容器样式
+        editorContainer.classList.remove('readonly-mode');
+        editorContainer.classList.add('edit-mode');
+        
+        // 更新模式指示器
+        modeIndicator.classList.remove('readonly');
+        modeIndicator.classList.add('editing');
+        modeIndicator.textContent = '编辑模式';
+        
+        // 确保深色主题
+        editor.refresh();
+        
+        showSaveStatus('已进入编辑模式，可以修改文件内容', 'success');
+    }
+    
+    // 退出编辑模式
+    function exitEditMode() {
+        isEditMode = false;
+        isModified = false;
+        editor.setOption('readOnly', true);
+        editor.setValue(originalContent);
+        
+        // 更新按钮显示
+        editBtn.style.display = 'inline-block';
+        saveBtn.style.display = 'none';
+        cancelBtn.style.display = 'none';
+        
+        // 更新容器样式
+        editorContainer.classList.remove('edit-mode');
+        editorContainer.classList.add('readonly-mode');
+        
+        // 更新模式指示器
+        modeIndicator.classList.remove('editing');
+        modeIndicator.classList.add('readonly');
+        modeIndicator.textContent = '只读模式';
+        
+        // 确保深色主题和刷新显示
+        editor.refresh();
+        
+        showSaveStatus('已退出编辑模式', 'success');
+    }
+    
+    // 监听内容变化
+    editor.on('change', function(cm, change) {
+        if (change.origin !== 'setValue' && isEditMode) {
+            isModified = (cm.getValue() !== originalContent);
+            updateSaveButton();
+        }
+    });
+    
+    // 更新保存按钮状态
+    function updateSaveButton() {
+        if (isModified && isEditMode) {
+            saveBtn.classList.remove('btn-success');
+            saveBtn.classList.add('btn-warning');
+            saveBtn.innerHTML = '<i class="fas fa-save me-1"></i>保存*';
+        } else {
+            saveBtn.classList.remove('btn-warning');
+            saveBtn.classList.add('btn-success');
+            saveBtn.innerHTML = '<i class="fas fa-save me-1"></i>保存';
+        }
+    }
+    
+    // 保存文件
+    function saveFile() {
+        if (!isEditMode) {
+            showSaveStatus('请先点击编辑按钮进入编辑模式', 'error');
+            return;
+        }
+        
+        const canEdit = {{ can_edit|yesno:"true,false" }};
+        if (!canEdit) {
+            showSaveStatus('无法保存：文件正在被其他用户编辑', 'error');
+            return;
+        }
+        
+        const content = editor.getValue();
+        const saveBtn = document.getElementById('saveBtn');
+        
+        // 显示保存中状态
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>保存中...';
+        
+        fetch('/modules/api/save/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                path: '{{ file_path }}',
+                content: content
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                originalContent = content;
+                isModified = false;
+                showSaveStatus('保存成功', 'success');
+                // 保存成功后可以选择退出编辑模式
+                // exitEditMode();
+            } else {
+                showSaveStatus('保存失败: ' + data.error, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('保存错误:', error);
+            showSaveStatus('保存失败: 网络错误', 'error');
+        })
+        .finally(() => {
+            saveBtn.disabled = false;
+            updateSaveButton();
+        });
+    }
+    
+    // 显示保存状态
+    function showSaveStatus(message, type) {
+        const statusDiv = document.getElementById('saveStatus');
+        const statusText = document.getElementById('saveStatusText');
+        
+        statusText.textContent = message;
+        statusDiv.className = `save-status ${type} show`;
+        
+        setTimeout(() => {
+            statusDiv.classList.remove('show');
+        }, 3000);
+    }
+    
+    // 工具栏按钮事件
+    editBtn.addEventListener('click', function() {
+        const canEdit = {{ can_edit|yesno:"true,false" }};
+        if (canEdit) {
+            enterEditMode();
+        } else {
+            showSaveStatus('无法编辑：文件正在被其他用户编辑', 'error');
+        }
+    });
+    
+    saveBtn.addEventListener('click', saveFile);
+    
+    cancelBtn.addEventListener('click', function() {
+        if (isModified) {
+            if (confirm('文件有未保存的更改，确认要取消编辑吗？')) {
+                exitEditMode();
+            }
+        } else {
+            exitEditMode();
+        }
+    });
+    
+    document.getElementById('formatBtn').addEventListener('click', function() {
+        // 简单的Python代码格式化（基本缩进整理）
+        const content = editor.getValue();
+        // 这里可以集成更高级的格式化工具
+        showSaveStatus('格式化功能待实现', 'error');
+    });
+    
+    document.getElementById('findBtn').addEventListener('click', function() {
+        CodeMirror.commands.find(editor);
+    });
+    
+    document.getElementById('fullscreenBtn').addEventListener('click', function() {
+        editor.setOption("fullScreen", !editor.getOption("fullScreen"));
+    });
+    
+    // 页面离开前检查
+    window.addEventListener('beforeunload', function(e) {
+        if (isModified && isEditMode) {
+            e.preventDefault();
+            e.returnValue = '文件有未保存的更改，确认要离开吗？';
+            return e.returnValue;
+        }
+    });
+    
+    // 关闭编辑会话（页面卸载时）
+    window.addEventListener('beforeunload', function() {
+        if (navigator.sendBeacon) {
+            const formData = new FormData();
+            formData.append('path', '{{ file_path }}');
+            
+            navigator.sendBeacon('/modules/api/close-session/', formData);
+        }
+    });
+    
+    // 定期更新会话活跃状态
+    setInterval(function() {
+        fetch('/modules/api/close-session/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                path: '{{ file_path }}',
+                action: 'keep_alive'
+            })
+        });
+    }, 30000); // 每30秒更新一次
+});
+</script>
+
+<!-- 隐藏的CSRF token -->
+{% csrf_token %}
+{% endblock %}
