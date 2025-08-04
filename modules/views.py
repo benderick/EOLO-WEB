@@ -2,6 +2,8 @@
 模块管理视图
 """
 import json
+import ast
+from pathlib import Path
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponse
@@ -10,14 +12,16 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.utils import timezone
+from django.db.models import Count, Q
 from .file_manager import module_file_manager
-from .models import ModuleFile, ModuleEditSession
+from .models import ModuleFile, ModuleEditSession, ModuleItem, ModuleCategory
+from .module_analyzer import module_analyzer, ModuleAnalyzer
 
 
 @login_required
 def modules_list_view(request):
     """
-    模块列表页面 - 显示文件树
+    模块列表页面 - 显示文件树和模块列表
     """
     try:
         # 获取文件树结构
@@ -34,10 +38,30 @@ def modules_list_view(request):
             'total_directories': len(directories),
         }
         
+        # 获取模块列表（按分类分组）
+        module_items_by_category = {}
+        for category in ModuleCategory:
+            modules = ModuleItem.objects.filter(category=category.value).select_related('module_file')
+            module_items_by_category[category] = {
+                'label': category.label,
+                'value': category.value,
+                'modules': modules,
+                'count': modules.count()
+            }
+        
+        # 模块统计
+        module_stats = {
+            'total_modules': ModuleItem.objects.count(),
+            'total_files_with_modules': ModuleFile.objects.filter(module_items__isnull=False).distinct().count(),
+            'categories_count': {category.value: count['count'] for category, count in module_items_by_category.items()},
+        }
+        
         context = {
             'file_tree': file_tree,
             'directories': directories,
             'stats': stats,
+            'module_items_by_category': module_items_by_category,
+            'module_stats': module_stats,
             'workpieces_dir': str(module_file_manager.workpieces_dir),
         }
         
@@ -48,7 +72,9 @@ def modules_list_view(request):
         return render(request, 'modules/modules_list.html', {
             'file_tree': {},
             'directories': [],
-            'stats': {'total_files': 0, 'total_size': 0, 'total_directories': 0}
+            'stats': {'total_files': 0, 'total_size': 0, 'total_directories': 0},
+            'module_items_by_category': {},
+            'module_stats': {'total_modules': 0, 'total_files_with_modules': 0, 'categories_count': {}},
         })
 
 
@@ -91,6 +117,23 @@ def module_file_view(request, path):
             is_active=True
         ).first()
         
+        # 分析文件中的模块项
+        module_items = ModuleItem.objects.filter(module_file=module_file).order_by('category', 'name')
+        
+        # 分析__all__字段（实时分析）
+        file_path = module_file_manager.workpieces_dir / relative_path
+        all_items = module_analyzer.extract_all_items(file_path) if file_path.exists() else []
+        
+        # 按分类组织模块项
+        module_items_by_category = {}
+        for category in ModuleCategory:
+            items = module_items.filter(category=category.value)
+            module_items_by_category[category.value] = {
+                'label': category.label,
+                'items': items,
+                'count': items.count()
+            }
+        
         context = {
             'file_path': relative_path,
             'file_name': relative_path.split('/')[-1],
@@ -99,6 +142,10 @@ def module_file_view(request, path):
             'active_sessions': active_sessions,
             'can_edit': len(active_sessions) == 0,  # 只有没有其他人编辑时才能编辑
             'is_editing': current_user_session is not None,  # 当前用户是否正在编辑
+            'module_items': module_items,
+            'module_items_by_category': module_items_by_category,
+            'all_items': all_items,  # 当前文件的__all__字段内容
+            'categories': ModuleCategory.choices,  # 所有可用分类
         }
         
         return render(request, 'modules/module_file_editor.html', context)
@@ -481,4 +528,323 @@ def test_python_file(request):
         return JsonResponse({
             'success': False,
             'error': f'处理请求时发生错误: {str(e)}'
+        })
+
+
+@login_required
+@require_POST
+def scan_modules_api(request):
+    """
+    扫描所有Python文件，分析并更新模块列表
+    """
+    try:
+        # 扫描workpieces目录中的所有Python文件
+        workpieces_dir = module_file_manager.workpieces_dir
+        modules_info = module_analyzer.scan_modules_in_directory(workpieces_dir)
+        
+        updated_count = 0
+        created_count = 0
+        
+        for module_info in modules_info:
+            # 计算相对路径
+            file_path = Path(module_info['file_path'])
+            relative_path = file_path.relative_to(workpieces_dir)
+            
+            # 获取或创建ModuleFile记录
+            module_file, file_created = ModuleFile.objects.get_or_create(
+                relative_path=str(relative_path),
+                defaults={
+                    'name': file_path.name,
+                    'size': file_path.stat().st_size if file_path.exists() else 0,
+                    'uploaded_by': request.user,
+                }
+            )
+            
+            # 更新ModuleItem记录
+            existing_items = set(ModuleItem.objects.filter(module_file=module_file).values_list('name', flat=True))
+            current_items = set(module_info['all_items'])
+            
+            # 删除不再存在的项目
+            to_delete = existing_items - current_items
+            if to_delete:
+                ModuleItem.objects.filter(module_file=module_file, name__in=to_delete).delete()
+            
+            # 添加新项目
+            to_add = current_items - existing_items
+            for item_name in to_add:
+                ModuleItem.objects.create(
+                    module_file=module_file,
+                    name=item_name,
+                    category=ModuleCategory.OTHER,  # 默认分类
+                    auto_detected=True,
+                    classified_by=None  # 自动检测的项目没有分类者
+                )
+                created_count += 1
+            
+            if to_delete or to_add:
+                updated_count += 1
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'扫描完成',
+            'stats': {
+                'files_scanned': len(modules_info),
+                'files_updated': updated_count,
+                'items_created': created_count,
+            }
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': f'扫描失败: {str(e)}'
+        })
+
+
+@login_required
+@require_POST
+def classify_module_api(request):
+    """
+    对模块项进行分类
+    """
+    try:
+        data = json.loads(request.body)
+        module_id = data.get('module_id')
+        category = data.get('category')
+        
+        if not module_id or not category:
+            return JsonResponse({'success': False, 'error': '参数不完整'})
+        
+        # 验证分类是否有效
+        if category not in [choice[0] for choice in ModuleCategory.choices]:
+            return JsonResponse({'success': False, 'error': '无效的分类'})
+        
+        # 获取模块项
+        try:
+            module_item = ModuleItem.objects.get(id=module_id)
+        except ModuleItem.DoesNotExist:
+            return JsonResponse({'success': False, 'error': '模块项不存在'})
+        
+        # 更新分类
+        old_category = module_item.get_category_display()
+        module_item.category = category
+        module_item.classified_by = request.user
+        module_item.save()
+        
+        new_category = module_item.get_category_display()
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'模块 "{module_item.name}" 已从 "{old_category}" 重新分类为 "{new_category}"'
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': '请求数据格式错误'
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': f'分类失败: {str(e)}'
+        })
+
+
+@login_required
+def get_modules_by_category_api(request):
+    """
+    按分类获取模块列表
+    """
+    try:
+        category = request.GET.get('category')
+        
+        if category and category not in [choice[0] for choice in ModuleCategory.choices]:
+            return JsonResponse({'success': False, 'error': '无效的分类'})
+        
+        # 构建查询
+        modules_query = ModuleItem.objects.select_related('module_file')
+        if category:
+            modules_query = modules_query.filter(category=category)
+        
+        # 按分类分组
+        modules_by_category = {}
+        for cat in ModuleCategory:
+            cat_modules = modules_query.filter(category=cat.value)
+            modules_by_category[cat.value] = {
+                'label': cat.label,
+                'count': cat_modules.count(),
+                'modules': [
+                    {
+                        'id': module.id,
+                        'name': module.name,
+                        'file_path': module.module_file.relative_path,
+                        'file_name': module.module_file.name,
+                        'description': module.description,
+                        'auto_detected': module.auto_detected,
+                        'classified_by': module.classified_by.username if module.classified_by else None,
+                        'updated_at': module.updated_at.isoformat(),
+                    }
+                    for module in cat_modules.order_by('name')
+                ]
+            }
+        
+        return JsonResponse({
+            'success': True,
+            'modules_by_category': modules_by_category,
+            'total_modules': modules_query.count()
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': f'获取模块列表失败: {str(e)}'
+        })
+
+
+@require_http_methods(["POST"])
+@login_required
+def analyze_file_api(request):
+    """
+    分析单个Python文件的__all__字段API接口
+    """
+    try:
+        data = json.loads(request.body)
+        file_path = data.get('file_path')
+        
+        if not file_path:
+            return JsonResponse({
+                'success': False,
+                'error': '缺少文件路径参数'
+            })
+        
+        # 获取绝对路径
+        absolute_path = module_file_manager.workpieces_dir / file_path
+        
+        # 检查文件是否存在且是Python文件
+        if not absolute_path.exists():
+            return JsonResponse({
+                'success': False,
+                'error': f'文件不存在: {file_path}'
+            })
+        
+        if not absolute_path.suffix == '.py':
+            return JsonResponse({
+                'success': False,
+                'error': '只能分析Python文件(.py)'
+            })
+        
+        # 分析文件
+        analyzer = ModuleAnalyzer()
+        all_items = analyzer.extract_all_items(absolute_path)
+        
+        # 获取对应的ModuleFile记录
+        module_file = ModuleFile.objects.filter(relative_path=file_path).first()
+        if not module_file:
+            return JsonResponse({
+                'success': False,
+                'error': f'数据库中找不到文件记录: {file_path}'
+            })
+        
+        # 同步模块项：添加新项，删除不存在的项
+        current_all_items = set(all_items) if all_items else set()
+        
+        # 获取当前数据库中该文件的所有自动检测到的模块项
+        existing_auto_modules = ModuleItem.objects.filter(
+            module_file=module_file,
+            auto_detected=True
+        )
+        existing_module_names = set(existing_auto_modules.values_list('name', flat=True))
+        
+        # 统计操作结果
+        added_modules = []
+        updated_modules = []
+        deleted_modules = []
+        
+        # 1. 添加新发现的模块项
+        modules_to_add = current_all_items - existing_module_names
+        for item_name in modules_to_add:
+            module_item, created = ModuleItem.objects.get_or_create(
+                name=item_name,
+                module_file=module_file,
+                defaults={
+                    'category': ModuleCategory.OTHER,
+                    'auto_detected': True,
+                    'classified_by': request.user,
+                }
+            )
+            
+            if created:
+                added_modules.append({
+                    'name': module_item.name,
+                    'category': module_item.category,
+                })
+            else:
+                # 如果模块已存在但不是auto_detected，更新它
+                if not module_item.auto_detected:
+                    module_item.auto_detected = True
+                    module_item.save()
+                    updated_modules.append({
+                        'name': module_item.name,
+                        'category': module_item.category,
+                        'action': 'marked_as_auto_detected'
+                    })
+        
+        # 2. 删除不再存在于__all__中的自动检测模块项
+        modules_to_delete = existing_module_names - current_all_items
+        for module_name in modules_to_delete:
+            deleted_items = ModuleItem.objects.filter(
+                name=module_name,
+                module_file=module_file,
+                auto_detected=True
+            )
+            
+            for item in deleted_items:
+                deleted_modules.append({
+                    'name': item.name,
+                    'category': item.category,
+                })
+                item.delete()
+        
+        # 3. 确保仍存在的模块项保持auto_detected状态
+        modules_to_keep = current_all_items & existing_module_names
+        for module_name in modules_to_keep:
+            module_item = ModuleItem.objects.filter(
+                name=module_name,
+                module_file=module_file
+            ).first()
+            
+            if module_item and not module_item.auto_detected:
+                module_item.auto_detected = True
+                module_item.save()
+                updated_modules.append({
+                    'name': module_item.name,
+                    'category': module_item.category,
+                    'action': 'kept_and_marked_auto'
+                })
+        
+        # 构建详细的响应消息
+        messages = []
+        if added_modules:
+            messages.append(f'新增 {len(added_modules)} 个模块')
+        if updated_modules:
+            messages.append(f'更新 {len(updated_modules)} 个模块')
+        if deleted_modules:
+            messages.append(f'删除 {len(deleted_modules)} 个模块')
+        
+        summary_message = '、'.join(messages) if messages else '无变化'
+        
+        return JsonResponse({
+            'success': True,
+            'all_items': all_items,
+            'added_modules': added_modules,
+            'updated_modules': updated_modules,
+            'deleted_modules': deleted_modules,
+            'total_changes': len(added_modules) + len(updated_modules) + len(deleted_modules),
+            'message': f'成功同步模块信息: {summary_message}'
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': f'分析文件失败: {str(e)}'
         })

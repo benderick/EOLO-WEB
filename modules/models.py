@@ -9,6 +9,17 @@ from django.conf import settings
 User = get_user_model()
 
 
+class ModuleCategory(models.TextChoices):
+    """模块分类枚举"""
+    ATTENTION = 'attention', 'Attention'
+    CONVOLUTION = 'convolution', 'Convolution'
+    DOWN_UP = 'down_up', 'Down&Up'
+    FUSION = 'fusion', 'Fusion'
+    HEAD = 'head', 'Head'
+    BLOCK = 'block', 'Block'
+    OTHER = 'other', 'Other'
+
+
 class ModuleFile(models.Model):
     """
     Python模块文件记录
@@ -81,13 +92,50 @@ class ModuleEditSession(models.Model):
     module_file = models.ForeignKey(ModuleFile, on_delete=models.CASCADE, verbose_name="模块文件")
     user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="编辑用户")
     started_at = models.DateTimeField(auto_now_add=True, verbose_name="开始时间")
-    last_activity = models.DateTimeField(auto_now=True, verbose_name="最后活动时间")
     is_active = models.BooleanField(default=True, verbose_name="是否活跃")
     
     class Meta:
-        verbose_name = "编辑会话"
-        verbose_name_plural = "编辑会话"
+        verbose_name = "模块编辑会话"
+        verbose_name_plural = "模块编辑会话"
         unique_together = ['module_file', 'user']
     
     def __str__(self):
         return f"{self.user.username} 编辑 {self.module_file.name}"
+
+
+class ModuleItem(models.Model):
+    """
+    Python模块中的具体模块项（从__all__字段提取）
+    """
+    # 关联的模块文件
+    module_file = models.ForeignKey(ModuleFile, on_delete=models.CASCADE, 
+                                    related_name='module_items', verbose_name="模块文件")
+    
+    # 模块信息
+    name = models.CharField(max_length=255, verbose_name="模块名称")
+    category = models.CharField(max_length=20, choices=ModuleCategory.choices, 
+                                default=ModuleCategory.OTHER, verbose_name="模块分类")
+    
+    # 元数据
+    description = models.TextField(blank=True, verbose_name="模块描述")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
+    classified_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                      verbose_name="分类者")
+    
+    # 是否从__all__字段自动检测到
+    auto_detected = models.BooleanField(default=True, verbose_name="自动检测")
+    
+    class Meta:
+        verbose_name = "模块项"
+        verbose_name_plural = "模块项"
+        unique_together = ['module_file', 'name']  # 同一文件中模块名不能重复
+        ordering = ['category', 'name']
+    
+    def __str__(self):
+        return f"{self.name} ({self.get_category_display()}) - {self.module_file.name}"
+    
+    @property
+    def file_path(self):
+        """获取模块文件路径"""
+        return self.module_file.relative_path

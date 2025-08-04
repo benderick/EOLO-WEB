@@ -22,4 +22,10 @@ urlpatterns = [
     path('api/close-session/', views.close_edit_session, name='close_session'),
     path('api/enter-edit/', views.enter_edit_mode, name='enter_edit'),
     path('api/test-python/', views.test_python_file, name='test_python'),
+    
+    # 模块管理API
+    path('api/scan-modules/', views.scan_modules_api, name='scan_modules'),
+    path('api/classify-module/', views.classify_module_api, name='classify_module'),
+    path('api/modules-by-category/', views.get_modules_by_category_api, name='modules_by_category'),
+    path('api/analyze-file/', views.analyze_file_api, name='analyze_file'),
 ]

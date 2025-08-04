@@ -128,18 +128,144 @@
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(76, 175, 80, 0.3);
 }
+
+/* 模块列表样式 */
+.module-item {
+    transition: background-color 0.2s ease;
+}
+
+.module-item:hover {
+    background-color: #f8f9fa;
+}
+
+.module-item:last-child {
+    border-bottom: none !important;
+}
+
+.bg-gradient-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.category-card {
+    transition: transform 0.2s ease;
+}
+
+.category-card:hover {
+    transform: translateY(-2px);
+}
+
+.module-badge {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+}
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container-fluid mt-4">
+    <!-- 模块列表区域 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-gradient-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-cubes me-2"></i>模块列表
+                        <div class="float-end">
+                            <button id="scanModulesBtn" class="btn btn-sm btn-outline-light me-2">
+                                <i class="fas fa-search"></i> 扫描模块
+                            </button>
+                            <button id="refreshModulesBtn" class="btn btn-sm btn-outline-light">
+                                <i class="fas fa-sync-alt"></i> 刷新
+                            </button>
+                        </div>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <!-- 模块统计 -->
+                    <div class="row mb-4">
+                        <div class="col-md-3">
+                            <div class="stats-card">
+                                <div class="text-center">
+                                    <h4>{{ module_stats.total_modules }}</h4>
+                                    <small>总模块数</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stats-card">
+                                <div class="text-center">
+                                    <h4>{{ module_stats.total_files_with_modules }}</h4>
+                                    <small>包含模块的文件</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="stats-card">
+                                <div class="row text-center">
+                                    {% for category, count in module_stats.categories_count.items %}
+                                        <div class="col">
+                                            <h6>{{ count }}</h6>
+                                            <small>{{ category|title }}</small>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 按分类显示模块 -->
+                    <div class="row" id="modulesByCategory">
+                        {% for category, info in module_items_by_category.items %}
+                        <div class="col-md-4 mb-3">
+                            <div class="card border-primary">
+                                <div class="card-header bg-primary text-white">
+                                    <h6 class="mb-0">
+                                        <i class="fas fa-layer-group me-2"></i>{{ info.label }}
+                                        <span class="badge bg-light text-dark float-end">{{ info.count }}</span>
+                                    </h6>
+                                </div>
+                                <div class="card-body p-2" style="max-height: 300px; overflow-y: auto;">
+                                    {% if info.modules %}
+                                        {% for module in info.modules %}
+                                        <div class="module-item p-2 border-bottom">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <strong>{{ module.name }}</strong>
+                                                    <br>
+                                                    <small class="text-muted">{{ module.module_file.name }}</small>
+                                                </div>
+                                                <div>
+                                                    <button class="btn btn-sm btn-outline-primary edit-module-btn" 
+                                                            data-file-path="{{ module.module_file.relative_path }}">
+                                                        <i class="fas fa-edit"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {% endfor %}
+                                    {% else %}
+                                        <div class="text-center text-muted py-3">
+                                            <i class="fas fa-inbox"></i>
+                                            <p class="mb-0">暂无模块</p>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <div class="row">
         <!-- 左侧文件树 -->
         <div class="col-md-8">
             <div class="card">
                 <div class="card-header bg-primary text-white">
                     <h5 class="mb-0">
-                        <i class="fas fa-code me-2"></i>模块文件树
+                        <i class="fas fa-code me-2"></i>模块文件
                         <button id="refreshTreeBtn" class="btn btn-sm btn-outline-light float-end">
                             <i class="fas fa-sync-alt"></i> 刷新
                         </button>
@@ -292,6 +418,38 @@ document.addEventListener('DOMContentLoaded', function() {
     const uploadDropZone = document.getElementById('uploadDropZone');
     const fileInput = document.getElementById('fileInput');
     const uploadModal = new bootstrap.Modal(document.getElementById('uploadModal'));
+    
+    // 模块管理按钮事件
+    const scanModulesBtn = document.getElementById('scanModulesBtn');
+    const refreshModulesBtn = document.getElementById('refreshModulesBtn');
+    
+    // 扫描模块按钮点击事件
+    if (scanModulesBtn) {
+        scanModulesBtn.addEventListener('click', function() {
+            scanModules();
+        });
+    }
+    
+    // 刷新模块按钮点击事件
+    if (refreshModulesBtn) {
+        refreshModulesBtn.addEventListener('click', function() {
+            refreshModulesList();
+        });
+    }
+    
+    // 编辑模块按钮点击事件
+    document.addEventListener('click', function(e) {
+        if (e.target.classList.contains('edit-module-btn') || 
+            e.target.closest('.edit-module-btn')) {
+            const btn = e.target.classList.contains('edit-module-btn') ? 
+                        e.target : e.target.closest('.edit-module-btn');
+            const filePath = btn.getAttribute('data-file-path');
+            if (filePath) {
+                const encodedPath = filePath.replace(/\//g, '__');
+                window.location.href = `/modules/edit/${encodedPath}/`;
+            }
+        }
+    });
     
     // 文件树点击事件
     fileTree.addEventListener('click', function(e) {
@@ -486,6 +644,146 @@ function openFile(filePath) {
     
     // 跳转到文件编辑页面
     window.location.href = `/modules/edit/${encodeURIComponent(filePath)}/`;
+}
+
+// 模块管理相关函数
+
+// 扫描模块
+function scanModules() {
+    const btn = document.getElementById('scanModulesBtn');
+    const originalText = btn.innerHTML;
+    
+    // 设置加载状态
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 扫描中...';
+    
+    fetch('/modules/api/scan-modules/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+        
+        if (data.success) {
+            alert(`扫描完成！\n扫描文件: ${data.stats.files_scanned}\n更新文件: ${data.stats.files_updated}\n新增模块: ${data.stats.items_created}`);
+            refreshModulesList();
+        } else {
+            alert('扫描失败: ' + data.error);
+        }
+    })
+    .catch(error => {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+        console.error('扫描错误:', error);
+        alert('扫描失败: 网络错误');
+    });
+}
+
+// 刷新模块列表
+function refreshModulesList() {
+    fetch('/modules/api/modules-by-category/', {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            updateModulesDisplay(data.modules_by_category);
+        } else {
+            console.error('刷新模块列表失败:', data.error);
+        }
+    })
+    .catch(error => {
+        console.error('刷新模块列表错误:', error);
+    });
+}
+
+// 更新模块显示
+function updateModulesDisplay(modulesByCategory) {
+    const container = document.getElementById('modulesByCategory');
+    if (!container) return;
+    
+    // 清空现有内容
+    container.innerHTML = '';
+    
+    // 分类映射
+    const categoryLabels = {
+        'attention': 'Attention',
+        'convolution': 'Convolution', 
+        'down_up': 'Down&Up',
+        'fusion': 'Fusion',
+        'head': 'Head',
+        'block': 'Block',
+        'other': 'Other'
+    };
+    
+    // 重新生成模块列表
+    Object.keys(modulesByCategory).forEach(category => {
+        const info = modulesByCategory[category];
+        const categoryCard = document.createElement('div');
+        categoryCard.className = 'col-md-4 mb-3';
+        
+        categoryCard.innerHTML = `
+            <div class="card border-primary">
+                <div class="card-header bg-primary text-white">
+                    <h6 class="mb-0">
+                        <i class="fas fa-layer-group me-2"></i>${info.label}
+                        <span class="badge bg-light text-dark float-end">${info.count}</span>
+                    </h6>
+                </div>
+                <div class="card-body p-2" style="max-height: 300px; overflow-y: auto;">
+                    ${info.modules.length > 0 ? 
+                        info.modules.map(module => `
+                            <div class="module-item p-2 border-bottom">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>${module.name}</strong>
+                                        <br>
+                                        <small class="text-muted">${module.file_name}</small>
+                                    </div>
+                                    <div>
+                                        <button class="btn btn-sm btn-outline-primary edit-module-btn" 
+                                                data-file-path="${module.file_path}">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('') :
+                        `<div class="text-center text-muted py-3">
+                            <i class="fas fa-inbox"></i>
+                            <p class="mb-0">暂无模块</p>
+                        </div>`
+                    }
+                </div>
+            </div>
+        `;
+        
+        container.appendChild(categoryCard);
+    });
+}
+
+// 获取CSRF token的函数
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
 }
 </script>
 {% endblock %}
