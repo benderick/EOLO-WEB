@@ -2,11 +2,16 @@
 
 {% block title %}编辑模块 - {{ file_name }}{% endblock %}
 
+{% load static %}
+
 {% block extra_css %}
+<link href="{% static 'js/codemirror-5.65.0/lib/codemirror.css' %}" rel="stylesheet">
+<link href="{% static 'js/codemirror-5.65.0/theme/monokai.css' %}" rel="stylesheet">
+<link href="{% static 'js/codemirror-5.65.0/addon/hint/show-hint.css' %}" rel="stylesheet">
 <!-- CodeMirror CSS -->
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/codemirror.min.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/theme/monokai.min.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/addon/hint/show-hint.min.css">
+<!-- <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/lib/codemirror.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/theme/monokai.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/addon/hint/show-hint.min.css"> -->
 
 <style>
 .CodeMirror {
@@ -37,12 +42,12 @@
     right: 0;
     bottom: 0;
     height: 600px; /* 与CodeMirror相同的高度 */
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #272822 0%, #2f3129 100%);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 1000;
-    transition: opacity 0.3s ease-out, visibility 0.4s ease-out;
+    transition: opacity 0.3s ease-out, visibility 0.3s ease-out;
     border-radius: 4px;
     border: 1px solid #ddd; /* 与CodeMirror相同的边框 */
 }
@@ -153,6 +158,44 @@
     width: 3rem;
     height: 3rem;
     border-width: 0.3em;
+    /* 加快旋转速度 */
+    animation: spinner-border 0.2s linear infinite;
+}
+
+/* 自定义更快的旋转动画 */
+@keyframes spinner-border {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* 额外的加载动画效果 */
+.loading-content::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 4rem;
+    height: 4rem;
+    margin: -2rem 0 0 -2rem;
+    border: 2px solid transparent;
+    border-top: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    animation: pulse-ring 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-ring {
+    0% {
+        transform: scale(0.8);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(1.2);
+        opacity: 0;
+    }
 }
 
 .loading-text h5 {
@@ -169,7 +212,7 @@
 .CodeMirror {
     opacity: 0;
     visibility: hidden;
-    transition: opacity 0.3s ease-in-out, visibility 0.3s ease-in-out;
+    transition: opacity 0.1s ease-in-out, visibility 0.8s ease-in-out;
 }
 
 .CodeMirror.cm-ready {
@@ -181,7 +224,7 @@
 #codeEditor {
     opacity: 0;
     visibility: hidden;
-    transition: opacity 0.2s ease-in-out, visibility 0.2s ease-in-out;
+    transition: opacity 0.1s ease-in-out, visibility 0.1s ease-in-out;
 }
 
 /* 编辑器容器 */
@@ -621,15 +664,23 @@
 </div>
 {% endblock %}
 
+
 {% block extra_js %}
 <!-- CodeMirror JavaScript -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/codemirror.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/mode/python/python.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/addon/hint/show-hint.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/addon/hint/python-hint.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/addon/search/searchcursor.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/addon/search/search.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.0/addon/dialog/dialog.min.js"></script>
+<script src="{% static 'js/codemirror-5.65.0/lib/codemirror.js' %}"></script>
+<script src="{% static 'js/codemirror-5.65.0/mode/python/python.js' %}"></script>
+<script src="{% static 'js/codemirror-5.65.0/addon/hint/show-hint.js' %}"></script>
+<!-- <script src="{% static 'js/codemirror-5.65.0/addon/hint/python-hint.js' %}"></script> -->
+<script src="{% static 'js/codemirror-5.65.0/addon/search/searchcursor.js' %}"></script>
+<script src="{% static 'js/codemirror-5.65.0/addon/search/search.js' %}"></script>
+<script src="{% static 'js/codemirror-5.65.0/addon/dialog/dialog.js' %}"></script>
+<!-- <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/lib/codemirror.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/mode/python/python.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/addon/hint/show-hint.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/addon/hint/python-hint.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/addon/search/searchcursor.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/addon/search/search.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/addon/dialog/dialog.min.js"></script> -->
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -679,29 +730,30 @@ document.addEventListener('DOMContentLoaded', function() {
     
     originalContent = editor.getValue();
     
-    // 等待CodeMirror完全渲染后显示
-    editor.on('ready', function() {
-        setTimeout(function() {
-            if (loadingOverlay) {
-                loadingOverlay.classList.add('hidden');
-            }
-            const cmElement = editor.getWrapperElement();
-            if (cmElement) {
-                cmElement.classList.add('cm-ready');
-            }
-        }, 100);
-    });
+    // 立即隐藏加载遮罩，CodeMirror渲染很快
+    setTimeout(function() {
+        if (loadingOverlay) {
+            loadingOverlay.classList.add('hidden');
+        }
+        const cmElement = editor.getWrapperElement();
+        if (cmElement) {
+            cmElement.classList.add('cm-ready');
+            // 立即刷新编辑器确保正确显示
+            editor.refresh();
+        }
+    }, 50); // 减少延迟到50ms
     
-    // 如果ready事件没有触发，用备用方法
+    // 备用隐藏机制，如果上面的没有生效
     setTimeout(function() {
         if (loadingOverlay && !loadingOverlay.classList.contains('hidden')) {
             loadingOverlay.classList.add('hidden');
             const cmElement = editor.getWrapperElement();
             if (cmElement) {
                 cmElement.classList.add('cm-ready');
+                editor.refresh();
             }
         }
-    }, 500);
+    }, 200); // 减少备用延迟
     
     // 获取元素
     const editBtn = document.getElementById('editBtn');
@@ -1342,7 +1394,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 3000);
     }
     
-    }, 150); // setTimeout结束括号
+    }, 50); // 将初始化延迟从150ms减少到50ms，加快编辑器加载速度
 });
 </script>
 
