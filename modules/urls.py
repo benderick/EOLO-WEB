@@ -20,4 +20,6 @@ urlpatterns = [
     path('api/delete/', views.delete_module_file, name='delete_file'),
     path('api/tree/', views.module_file_tree_api, name='file_tree_api'),
     path('api/close-session/', views.close_edit_session, name='close_session'),
+    path('api/enter-edit/', views.enter_edit_mode, name='enter_edit'),
+    path('api/test-python/', views.test_python_file, name='test_python'),
 ]

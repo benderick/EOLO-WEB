@@ -29,6 +29,36 @@
     position: relative;
 }
 
+/* 编辑器加载遮罩样式 */
+.editor-loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 600px; /* 与CodeMirror相同的高度 */
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    transition: opacity 0.3s ease-out, visibility 0.4s ease-out;
+    border-radius: 4px;
+    border: 1px solid #ddd; /* 与CodeMirror相同的边框 */
+}
+
+.editor-loading-overlay.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+/* 编辑器容器 */
+#editorContainer {
+    position: relative;
+    min-height: 600px; /* 与CodeMirror相同的最小高度 */
+}
+
 .file-info-bar {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
@@ -113,6 +143,52 @@
     50% { opacity: 0.7; }
     100% { opacity: 1; }
 }
+
+.loading-content {
+    text-align: center;
+    color: white;
+}
+
+.loading-content .spinner-border {
+    width: 3rem;
+    height: 3rem;
+    border-width: 0.3em;
+}
+
+.loading-text h5 {
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+}
+
+.loading-text p {
+    font-size: 14px;
+    margin-bottom: 0;
+}
+
+/* CodeMirror 平滑过渡 */
+.CodeMirror {
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease-in-out, visibility 0.3s ease-in-out;
+}
+
+.CodeMirror.cm-ready {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* 初始隐藏原始textarea */
+#codeEditor {
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s ease-in-out, visibility 0.2s ease-in-out;
+}
+
+/* 编辑器容器 */
+#editorContainer {
+    position: relative;
+    min-height: 400px;
+}
 </style>
 {% endblock %}
 
@@ -138,13 +214,13 @@
                         <a href="{% url 'modules:list' %}" class="btn btn-outline-light me-2">
                             <i class="fas fa-arrow-left me-1"></i>返回列表
                         </a>
-                        <button id="editBtn" class="btn btn-warning me-2" {% if not can_edit %}disabled title="文件正在被其他用户编辑"{% endif %}>
+                        <button id="editBtn" class="btn btn-warning me-2" {% if not can_edit %}disabled title="文件正在被其他用户编辑"{% endif %} {% if is_editing %}style="display: none;"{% endif %}>
                             <i class="fas fa-edit me-1"></i>编辑
                         </button>
-                        <button id="saveBtn" class="btn btn-success" style="display: none;">
+                        <button id="saveBtn" class="btn btn-success" {% if not is_editing %}style="display: none;"{% endif %}>
                             <i class="fas fa-save me-1"></i>保存
                         </button>
-                        <button id="cancelBtn" class="btn btn-secondary" style="display: none;">
+                        <button id="cancelBtn" class="btn btn-secondary" {% if not is_editing %}style="display: none;"{% endif %}>
                             <i class="fas fa-times me-1"></i>取消
                         </button>
                     </div>
@@ -177,6 +253,9 @@
                         </div>
                         <div class="col-md-6 text-end">
                             <div class="btn-group btn-group-sm" role="group">
+                                <button type="button" class="btn btn-outline-success" id="testBtn" onclick="testPythonFile()">
+                                    <i class="fas fa-play me-1"></i>测试运行
+                                </button>
                                 <button type="button" class="btn btn-outline-secondary" id="formatBtn">
                                     <i class="fas fa-code me-1"></i>格式化
                                 </button>
@@ -190,9 +269,24 @@
                         </div>
                     </div>
                 </div>
-                <div class="editor-container readonly-mode" id="editorContainer">
-                    <div class="mode-indicator readonly" id="modeIndicator">只读模式</div>
-                    <textarea id="codeEditor">{{ file_content }}</textarea>
+                <div class="editor-container {% if is_editing %}edit-mode{% else %}readonly-mode{% endif %}" id="editorContainer">
+                    <!-- 编辑器加载遮罩 -->
+                    <div class="editor-loading-overlay" id="editorLoadingOverlay">
+                        <div class="loading-content">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">加载中...</span>
+                            </div>
+                            <div class="loading-text mt-3">
+                                <h5>正在初始化编辑器...</h5>
+                                <p class="text-muted">请稍候，代码编辑器正在加载中</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mode-indicator {% if is_editing %}edit{% else %}readonly{% endif %}" id="modeIndicator">
+                        {% if is_editing %}编辑模式{% else %}只读模式{% endif %}
+                    </div>
+                    <textarea id="codeEditor" style="opacity: 0; visibility: hidden;">{{ file_content }}</textarea>
                 </div>
             </div>
         </div>
@@ -202,6 +296,67 @@
 <!-- 保存状态提示 -->
 <div id="saveStatus" class="save-status">
     <span id="saveStatusText"></span>
+</div>
+
+<!-- 测试结果模态框 -->
+<div class="modal fade" id="testResultModal" tabindex="-1" aria-labelledby="testResultModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="testResultModalLabel">
+                    <i class="fas fa-play-circle text-success me-2"></i>Python 文件测试结果
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">
+                        <i class="fas fa-file-code me-1"></i>测试文件:
+                    </label>
+                    <div class="alert alert-info py-2 px-3">
+                        <code id="testFilePath">{{ file_path }}</code>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label fw-bold">
+                        <i class="fas fa-terminal me-1"></i>执行命令:
+                    </label>
+                    <div class="alert alert-secondary py-2 px-3">
+                        <code id="testCommand">cd EOLO && uv run --quiet {{ file_path }}</code>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <div id="testStatus" class="alert" style="display: none;">
+                        <i class="fas fa-info-circle me-1"></i>
+                        <span id="testStatusText"></span>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label fw-bold">
+                        <i class="fas fa-clipboard-list me-1"></i>输出结果:
+                    </label>
+                    <div class="border rounded" style="background-color: #1e1e1e; color: #d4d4d4; font-family: 'Courier New', monospace;">
+                        <div class="d-flex justify-content-between align-items-center px-3 py-2 border-bottom" style="background-color: #2d2d30;">
+                            <small class="text-muted">控制台输出</small>
+                            <button type="button" class="btn btn-sm btn-outline-light" onclick="copyTestOutput()">
+                                <i class="fas fa-copy me-1"></i>复制
+                            </button>
+                        </div>
+                        <pre id="testOutput" class="p-3 m-0" style="max-height: 400px; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word;">等待执行...</pre>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-success" onclick="testPythonFile()" id="retestBtn">
+                    <i class="fas fa-redo me-1"></i>重新测试
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- 确认离开对话框 -->
@@ -236,36 +391,75 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    let isEditMode = false;
+    let isEditMode = {{ is_editing|yesno:"true,false" }};
     let isModified = false;
     let originalContent = '';
     
-    // 初始化CodeMirror编辑器（只读模式）
-    const editor = CodeMirror.fromTextArea(document.getElementById('codeEditor'), {
-        mode: 'python',
-        theme: 'monokai',
-        lineNumbers: true,
-        indentUnit: 4,
-        indentWithTabs: false,
-        readOnly: true,  // 默认只读
-        extraKeys: {
-            "Ctrl-Space": "autocomplete",
-            "Ctrl-S": function(cm) {
-                if (isEditMode) saveFile();
+    // 获取DOM元素
+    const textarea = document.getElementById('codeEditor');
+    const loadingOverlay = document.querySelector('.editor-loading-overlay');
+    
+    // 显示加载遮罩，隐藏原始textarea
+    if (loadingOverlay) {
+        loadingOverlay.classList.remove('hidden');
+    }
+    if (textarea) {
+        textarea.style.opacity = '0';
+        textarea.style.visibility = 'hidden';
+    }
+    
+    // 延迟初始化CodeMirror以确保平滑过渡
+    setTimeout(function() {
+        // 初始化CodeMirror编辑器（根据编辑状态设置）
+        const editor = CodeMirror.fromTextArea(textarea, {
+            mode: 'python',
+            theme: 'monokai',
+            lineNumbers: true,
+            indentUnit: 4,
+            indentWithTabs: false,
+            readOnly: !isEditMode,  // 根据编辑状态设置
+            extraKeys: {
+                "Ctrl-Space": "autocomplete",
+                "Ctrl-S": function(cm) {
+                    if (isEditMode) saveFile();
+                },
+                "F11": function(cm) {
+                    cm.setOption("fullScreen", !cm.getOption("fullScreen"));
+                },
+                "Esc": function(cm) {
+                    if (cm.getOption("fullScreen")) cm.setOption("fullScreen", false);
+                }
             },
-            "F11": function(cm) {
-                cm.setOption("fullScreen", !cm.getOption("fullScreen"));
-            },
-            "Esc": function(cm) {
-                if (cm.getOption("fullScreen")) cm.setOption("fullScreen", false);
-            }
-        },
-        hintOptions: {
+            hintOptions: {
             hint: CodeMirror.hint.python
         }
     });
     
     originalContent = editor.getValue();
+    
+    // 等待CodeMirror完全渲染后显示
+    editor.on('ready', function() {
+        setTimeout(function() {
+            if (loadingOverlay) {
+                loadingOverlay.classList.add('hidden');
+            }
+            const cmElement = editor.getWrapperElement();
+            if (cmElement) {
+                cmElement.classList.add('cm-ready');
+            }
+        }, 100);
+    });
+    
+    // 如果ready事件没有触发，用备用方法
+    setTimeout(function() {
+        if (loadingOverlay && !loadingOverlay.classList.contains('hidden')) {
+            loadingOverlay.classList.add('hidden');
+            const cmElement = editor.getWrapperElement();
+            if (cmElement) {
+                cmElement.classList.add('cm-ready');
+            }
+        }
+    }, 500);
     
     // 获取元素
     const editBtn = document.getElementById('editBtn');
@@ -276,39 +470,122 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 切换到编辑模式
     function enterEditMode() {
-        isEditMode = true;
-        editor.setOption('readOnly', false);
-        editor.focus();
+        // 首先检查权限
+        const canEdit = {{ can_edit|yesno:"true,false" }};
+        if (!canEdit) {
+            showSaveStatus('文件正在被其他用户编辑，无法进入编辑模式', 'error');
+            return;
+        }
         
-        // 更新按钮显示
-        editBtn.style.display = 'none';
-        saveBtn.style.display = 'inline-block';
-        cancelBtn.style.display = 'inline-block';
+        // 显示加载状态
+        editBtn.disabled = true;
+        editBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>进入编辑...';
         
-        // 更新容器样式
-        editorContainer.classList.remove('readonly-mode');
-        editorContainer.classList.add('edit-mode');
-        
-        // 更新模式指示器
-        modeIndicator.classList.remove('readonly');
-        modeIndicator.classList.add('editing');
-        modeIndicator.textContent = '编辑模式';
-        
-        // 确保深色主题
-        editor.refresh();
-        
-        showSaveStatus('已进入编辑模式，可以修改文件内容', 'success');
+        // 调用API进入编辑模式
+        fetch('/modules/api/enter-edit/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                file_path: '{{ file_path }}'
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            // 恢复按钮状态
+            editBtn.disabled = false;
+            editBtn.innerHTML = '<i class="fas fa-edit me-1"></i>编辑';
+            
+            if (data.success) {
+                // 成功进入编辑模式
+                isEditMode = true;
+                editor.setOption('readOnly', false);
+                editor.focus();
+                
+                // 更新按钮显示
+                editBtn.style.display = 'none';
+                saveBtn.style.display = 'inline-block';
+                cancelBtn.style.display = 'inline-block';
+                
+                // 更新容器样式
+                editorContainer.classList.remove('readonly-mode');
+                editorContainer.classList.add('edit-mode');
+                
+                // 更新模式指示器
+                modeIndicator.classList.remove('readonly');
+                modeIndicator.classList.add('edit');
+                modeIndicator.textContent = '编辑模式';
+                
+                // 确保深色主题
+                editor.refresh();
+                
+                showSaveStatus('已进入编辑模式，可以修改文件内容', 'success');
+            } else {
+                // 处理编辑冲突或其他错误
+                if (data.error === 'editing_conflict') {
+                    let message = '以下用户正在编辑此文件：\n\n';
+                    data.other_users.forEach(user => {
+                        message += `${user.username} (${user.minutes_ago} 分钟前)\n`;
+                    });
+                    message += '\n为避免冲突，建议等待其他用户完成编辑后再进行修改。';
+                    alert(message);
+                } else {
+                    showSaveStatus('进入编辑模式失败: ' + data.error, 'error');
+                }
+            }
+        })
+        .catch(error => {
+            // 恢复按钮状态
+            editBtn.disabled = false;
+            editBtn.innerHTML = '<i class="fas fa-edit me-1"></i>编辑';
+            
+            console.error('进入编辑模式失败:', error);
+            showSaveStatus('网络错误，无法进入编辑模式', 'error');
+        });
     }
     
     // 退出编辑模式
     function exitEditMode() {
+        // 调用API关闭编辑会话
+        fetch('/modules/api/close-session/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                path: '{{ file_path }}'
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                console.log('编辑会话已关闭');
+            } else {
+                console.error('关闭编辑会话失败:', data.error);
+            }
+        })
+        .catch(error => {
+            console.error('关闭编辑会话网络错误:', error);
+        });
+        
+        // 更新界面状态
         isEditMode = false;
         isModified = false;
         editor.setOption('readOnly', true);
-        editor.setValue(originalContent);
+        
+        // 重置内容为原始内容（避免显示未保存的修改）
+        if (editor.getValue() !== originalContent) {
+            editor.setValue(originalContent);
+        }
         
         // 更新按钮显示
         editBtn.style.display = 'inline-block';
+        editBtn.disabled = false;
+        editBtn.innerHTML = '<i class="fas fa-edit me-1"></i>编辑';
+        
         saveBtn.style.display = 'none';
         cancelBtn.style.display = 'none';
         
@@ -317,12 +594,14 @@ document.addEventListener('DOMContentLoaded', function() {
         editorContainer.classList.add('readonly-mode');
         
         // 更新模式指示器
-        modeIndicator.classList.remove('editing');
+        modeIndicator.classList.remove('edit');
         modeIndicator.classList.add('readonly');
-        modeIndicator.textContent = '只读模式';
+        modeIndicator.innerHTML = '<i class="fas fa-eye me-1"></i>只读模式';
         
-        // 确保深色主题和刷新显示
-        editor.refresh();
+        // 确保编辑器刷新显示
+        setTimeout(() => {
+            editor.refresh();
+        }, 100);
         
         showSaveStatus('已退出编辑模式', 'success');
     }
@@ -362,7 +641,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         const content = editor.getValue();
-        const saveBtn = document.getElementById('saveBtn');
         
         // 显示保存中状态
         saveBtn.disabled = true;
@@ -384,9 +662,9 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.success) {
                 originalContent = content;
                 isModified = false;
-                showSaveStatus('保存成功', 'success');
-                // 保存成功后可以选择退出编辑模式
-                // exitEditMode();
+                showSaveStatus('保存成功，已退出编辑模式', 'success');
+                // 保存成功后自动退出编辑模式
+                exitEditMode();
             } else {
                 showSaveStatus('保存失败: ' + data.error, 'error');
             }
@@ -484,6 +762,145 @@ document.addEventListener('DOMContentLoaded', function() {
             })
         });
     }, 30000); // 每30秒更新一次
+    
+    // Python文件测试功能
+    function testPythonFile() {
+        // 显示模态框
+        const modal = new bootstrap.Modal(document.getElementById('testResultModal'));
+        modal.show();
+        
+        // 重置状态
+        document.getElementById('testStatus').style.display = 'none';
+        document.getElementById('testOutput').textContent = '正在执行测试...';
+        
+        // 更新按钮状态
+        const testBtn = document.getElementById('testBtn');
+        const retestBtn = document.getElementById('retestBtn');
+        const originalHtml = testBtn.innerHTML;
+        
+        testBtn.disabled = true;
+        retestBtn.disabled = true;
+        testBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>测试中...';
+        retestBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>测试中...';
+        
+        // 发送测试请求
+        fetch('/modules/api/test-python/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                file_path: '{{ file_path }}'
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            // 恢复按钮状态
+            testBtn.disabled = false;
+            retestBtn.disabled = false;
+            testBtn.innerHTML = originalHtml;
+            retestBtn.innerHTML = '<i class="fas fa-redo me-1"></i>重新测试';
+            
+            // 显示结果
+            if (data.success) {
+                // 显示状态
+                const statusDiv = document.getElementById('testStatus');
+                const statusText = document.getElementById('testStatusText');
+                
+                if (data.exit_code === 0) {
+                    statusDiv.className = 'alert alert-success';
+                    statusText.innerHTML = '<i class="fas fa-check-circle me-1"></i>执行成功 (退出码: 0)';
+                } else {
+                    statusDiv.className = 'alert alert-warning';
+                    statusText.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i>执行完成但有错误 (退出码: ' + data.exit_code + ')';
+                }
+                statusDiv.style.display = 'block';
+                
+                // 显示输出
+                const output = data.output || '(无输出)';
+                document.getElementById('testOutput').textContent = output;
+                
+                // 更新命令显示
+                document.getElementById('testCommand').textContent = data.command || 'cd EOLO && uv run --quiet {{ file_path }}';
+            } else {
+                // 显示错误状态
+                const statusDiv = document.getElementById('testStatus');
+                const statusText = document.getElementById('testStatusText');
+                
+                statusDiv.className = 'alert alert-danger';
+                statusText.innerHTML = '<i class="fas fa-times-circle me-1"></i>执行失败';
+                statusDiv.style.display = 'block';
+                
+                // 显示错误信息
+                document.getElementById('testOutput').textContent = data.error || '未知错误';
+            }
+        })
+        .catch(error => {
+            // 恢复按钮状态
+            testBtn.disabled = false;
+            retestBtn.disabled = false;
+            testBtn.innerHTML = originalHtml;
+            retestBtn.innerHTML = '<i class="fas fa-redo me-1"></i>重新测试';
+            
+            // 显示网络错误
+            const statusDiv = document.getElementById('testStatus');
+            const statusText = document.getElementById('testStatusText');
+            
+            statusDiv.className = 'alert alert-danger';
+            statusText.innerHTML = '<i class="fas fa-times-circle me-1"></i>网络错误';
+            statusDiv.style.display = 'block';
+            
+            document.getElementById('testOutput').textContent = '网络请求失败: ' + error.message;
+        });
+    }
+    
+    // 复制测试输出
+    function copyTestOutput() {
+        const output = document.getElementById('testOutput').textContent;
+        navigator.clipboard.writeText(output).then(function() {
+            // 显示复制成功提示
+            showToast('输出内容已复制到剪贴板', 'success');
+        }).catch(function(err) {
+            console.error('复制失败:', err);
+            showToast('复制失败', 'error');
+        });
+    }
+    
+    // 显示提示消息
+    function showToast(message, type = 'info') {
+        const toast = document.createElement('div');
+        toast.className = `toast align-items-center text-white bg-${type === 'success' ? 'success' : type === 'error' ? 'danger' : 'info'} border-0`;
+        toast.style.position = 'fixed';
+        toast.style.top = '20px';
+        toast.style.right = '20px';
+        toast.style.zIndex = '9999';
+        
+        toast.innerHTML = `
+            <div class="d-flex">
+                <div class="toast-body">
+                    <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'times-circle' : 'info-circle'} me-2"></i>
+                    ${message}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" onclick="this.parentElement.parentElement.remove()"></button>
+            </div>
+        `;
+        
+        document.body.appendChild(toast);
+        
+        // 3秒后自动移除
+        setTimeout(() => {
+            if (toast.parentElement) {
+                toast.remove();
+            }
+        }, 3000);
+    }
+    
+    // 将函数暴露到全局作用域
+    window.testPythonFile = testPythonFile;
+    window.copyTestOutput = copyTestOutput;
+    
+    }, 150); // setTimeout结束括号
 });
 </script>
 

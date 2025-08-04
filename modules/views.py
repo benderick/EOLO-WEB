@@ -74,7 +74,7 @@ def module_file_view(request, path):
             is_active=True
         ).exclude(user=request.user)
         
-        # 创建或更新编辑会话
+        # 获取或创建模块文件记录（但不创建编辑会话）
         module_file, created = ModuleFile.objects.get_or_create(
             relative_path=relative_path,
             defaults={
@@ -84,16 +84,12 @@ def module_file_view(request, path):
             }
         )
         
-        edit_session, session_created = ModuleEditSession.objects.get_or_create(
+        # 检查当前用户是否有活跃的编辑会话
+        current_user_session = ModuleEditSession.objects.filter(
             module_file=module_file,
             user=request.user,
-            defaults={'is_active': True}
-        )
-        
-        if not session_created:
-            edit_session.last_activity = timezone.now()
-            edit_session.is_active = True
-            edit_session.save()
+            is_active=True
+        ).first()
         
         context = {
             'file_path': relative_path,
@@ -102,6 +98,7 @@ def module_file_view(request, path):
             'file_size': len(content.encode('utf-8')),
             'active_sessions': active_sessions,
             'can_edit': len(active_sessions) == 0,  # 只有没有其他人编辑时才能编辑
+            'is_editing': current_user_session is not None,  # 当前用户是否正在编辑
         }
         
         return render(request, 'modules/module_file_editor.html', context)
@@ -143,13 +140,13 @@ def save_module_file(request):
         )
         
         if success:
-            # 更新编辑会话
+            # 保存成功后关闭编辑会话（自动退出编辑模式）
             try:
                 module_file = ModuleFile.objects.get(relative_path=relative_path)
                 ModuleEditSession.objects.filter(
                     module_file=module_file,
                     user=request.user
-                ).update(last_activity=timezone.now())
+                ).update(is_active=False, last_activity=timezone.now())
             except:
                 pass
         
@@ -305,4 +302,183 @@ def close_edit_session(request):
         return JsonResponse({
             'success': False,
             'error': str(e)
+        })
+
+
+@login_required
+@csrf_exempt
+@require_POST
+def enter_edit_mode(request):
+    """
+    进入编辑模式
+    """
+    try:
+        data = json.loads(request.body)
+        file_path = data.get('file_path')
+        
+        if not file_path:
+            return JsonResponse({
+                'success': False,
+                'error': '缺少文件路径参数'
+            })
+        
+        # 检查是否有其他用户正在编辑
+        active_sessions = ModuleEditSession.objects.filter(
+            module_file__relative_path=file_path,
+            is_active=True
+        ).exclude(user=request.user)
+        
+        if active_sessions.exists():
+            # 获取其他编辑用户信息
+            other_users = []
+            for session in active_sessions:
+                time_diff = timezone.now() - session.last_activity
+                minutes_ago = int(time_diff.total_seconds() / 60)
+                other_users.append({
+                    'username': session.user.username,
+                    'minutes_ago': minutes_ago
+                })
+            
+            return JsonResponse({
+                'success': False,
+                'error': 'editing_conflict',
+                'other_users': other_users
+            })
+        
+        # 获取或创建模块文件记录
+        module_file, created = ModuleFile.objects.get_or_create(
+            relative_path=file_path,
+            defaults={
+                'name': file_path.split('/')[-1],
+                'size': 0,  # 这里可以根据需要获取实际大小
+                'uploaded_by': request.user,
+            }
+        )
+        
+        # 创建或激活编辑会话
+        edit_session, session_created = ModuleEditSession.objects.get_or_create(
+            module_file=module_file,
+            user=request.user,
+            defaults={'is_active': True}
+        )
+        
+        if not session_created:
+            edit_session.last_activity = timezone.now()
+            edit_session.is_active = True
+            edit_session.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': '已进入编辑模式'
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': '请求数据格式错误'
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': f'进入编辑模式失败: {str(e)}'
+        })
+
+
+@login_required
+@csrf_exempt
+@require_POST
+def test_python_file(request):
+    """
+    测试运行Python文件
+    """
+    import subprocess
+    import os
+    from pathlib import Path
+    from django.conf import settings
+    
+    try:
+        data = json.loads(request.body)
+        file_path = data.get('file_path')
+        
+        if not file_path:
+            return JsonResponse({
+                'success': False,
+                'error': '缺少文件路径参数'
+            })
+        
+        # 获取绝对路径
+        absolute_path = module_file_manager.workpieces_dir / file_path
+        
+        # 检查文件是否存在且是Python文件
+        if not absolute_path.exists():
+            return JsonResponse({
+                'success': False,
+                'error': f'文件不存在: {file_path}'
+            })
+        
+        if not absolute_path.suffix == '.py':
+            return JsonResponse({
+                'success': False,
+                'error': '只能测试Python文件(.py)'
+            })
+        
+        # 构建执行命令
+        eolo_dir = Path(settings.BASE_DIR).parent / 'EOLO'
+        command = f'cd "{eolo_dir}" && uv run --quiet "{absolute_path}"'
+        
+        try:
+            # 执行命令
+            result = subprocess.run(
+                command,
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=30,  # 30秒超时
+                cwd=str(eolo_dir)
+            )
+            
+            # 合并stdout和stderr
+            output = ""
+            if result.stdout:
+                output += result.stdout
+            if result.stderr:
+                if output:
+                    output += "\n--- 错误输出 ---\n"
+                output += result.stderr
+            
+            if not output.strip():
+                output = "(无输出)"
+            
+            return JsonResponse({
+                'success': True,
+                'output': output,
+                'exit_code': result.returncode,
+                'command': command
+            })
+            
+        except subprocess.TimeoutExpired:
+            return JsonResponse({
+                'success': False,
+                'error': '执行超时（超过30秒）'
+            })
+        except subprocess.CalledProcessError as e:
+            return JsonResponse({
+                'success': False,
+                'error': f'命令执行失败: {e.stderr or str(e)}'
+            })
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': f'执行过程中发生错误: {str(e)}'
+            })
+            
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': '请求数据格式错误'
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': f'处理请求时发生错误: {str(e)}'
         })
