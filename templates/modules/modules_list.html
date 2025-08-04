@@ -111,6 +111,10 @@
     color: white;
     border-radius: 10px;
     padding: 20px;
+    min-height: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 /* 代码编辑器按钮 */
@@ -158,6 +162,20 @@
     font-size: 0.75rem;
     padding: 0.25rem 0.5rem;
 }
+
+/* 修复复选框对齐问题 */
+.category-checkbox {
+    margin-top: 0 !important;
+    transform: translateY(-1px);
+}
+
+.form-check-label {
+    cursor: pointer;
+}
+
+.form-check-label h6 {
+    margin-bottom: 0;
+}
 </style>
 {% endblock %}
 
@@ -182,25 +200,26 @@
                 </div>
                 <div class="card-body">
                     <!-- 模块统计 -->
-                    <div class="row mb-4">
-                        <div class="col-md-3">
-                            <div class="stats-card">
+                    <!-- 统计信息 -->
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <div class="stats-card h-100">
                                 <div class="text-center">
                                     <h4>{{ module_stats.total_modules }}</h4>
                                     <small>总模块数</small>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-3">
-                            <div class="stats-card">
+                        <div class="col-md-4">
+                            <div class="stats-card h-100">
                                 <div class="text-center">
                                     <h4>{{ module_stats.total_files_with_modules }}</h4>
-                                    <small>包含模块的文件</small>
+                                    <small>模块文件数</small>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-6">
-                            <div class="stats-card">
+                        <div class="col-md-4">
+                            <div class="stats-card h-100">
                                 <div class="row text-center">
                                     {% for category, count in module_stats.categories_count.items %}
                                         <div class="col">
@@ -211,32 +230,68 @@
                                 </div>
                             </div>
                         </div>
-                    </div>
-                    
-                    <!-- 按分类显示模块 -->
+                    </div>                    <!-- 按分类显示模块 -->
                     <div class="row" id="modulesByCategory">
                         {% for category, info in module_items_by_category.items %}
                         <div class="col-md-4 mb-3">
                             <div class="card border-primary">
                                 <div class="card-header bg-primary text-white">
-                                    <h6 class="mb-0">
-                                        <i class="fas fa-layer-group me-2"></i>{{ info.label }}
-                                        <span class="badge bg-light text-dark float-end">{{ info.count }}</span>
-                                    </h6>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div class="d-flex align-items-center">
+                                            {% if category != 'other' %}
+                                                <input type="checkbox" class="form-check-input category-checkbox me-2" 
+                                                       id="category_{{ category }}" 
+                                                       data-category="{{ category }}"
+                                                       data-category-label="{{ info.label }}"
+                                                       style="margin-top: 0; vertical-align: middle;">
+                                                <label for="category_{{ category }}" class="form-check-label mb-0">
+                                            {% endif %}
+                                            <h6 class="mb-0">
+                                                <i class="fas fa-layer-group me-2"></i>{{ info.label }}
+                                                <span class="badge bg-light text-dark ms-2">{{ info.count }}</span>
+                                            </h6>
+                                            {% if category != 'other' %}
+                                                </label>
+                                            {% endif %}
+                                        </div>
+                                        {% if is_admin and category != 'other' %}
+                                            <div class="admin-controls">
+                                                <button class="btn btn-sm btn-outline-light delete-category-btn" 
+                                                        data-category="{{ category }}" 
+                                                        data-category-label="{{ info.label }}"
+                                                        title="删除分类">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        {% endif %}
+                                    </div>
                                 </div>
                                 <div class="card-body p-2" style="max-height: 300px; overflow-y: auto;">
                                     {% if info.modules %}
                                         {% for module in info.modules %}
                                         <div class="module-item p-2 border-bottom">
                                             <div class="d-flex justify-content-between align-items-center">
-                                                <div>
-                                                    <strong>{{ module.name }}</strong>
-                                                    <br>
-                                                    <small class="text-muted">{{ module.module_file.name }}</small>
+                                                <div class="d-flex align-items-center flex-grow-1">
+                                                    {% if category != 'other' %}
+                                                        <input type="checkbox" class="form-check-input module-checkbox me-2" 
+                                                               data-module-name="{{ module.name }}"
+                                                               data-module-category="{{ category }}"
+                                                               data-module-id="{{ module.id }}">
+                                                    {% endif %}
+                                                    <div>
+                                                        <strong>{{ module.name }}</strong>
+                                                        <br>
+                                                        <small class="text-muted">{{ module.module_file.name }}</small>
+                                                        {% if module.description %}
+                                                            <br>
+                                                            <small class="text-info">{{ module.description|truncatewords:8 }}</small>
+                                                        {% endif %}
+                                                    </div>
                                                 </div>
                                                 <div>
                                                     <button class="btn btn-sm btn-outline-primary edit-module-btn" 
-                                                            data-file-path="{{ module.module_file.relative_path }}">
+                                                            data-file-path="{{ module.module_file.relative_path }}"
+                                                            title="编辑文件">
                                                         <i class="fas fa-edit"></i>
                                                     </button>
                                                 </div>
@@ -254,6 +309,118 @@
                         </div>
                         {% endfor %}
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    {% if is_admin %}
+    <!-- 管理员分类管理区域 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <h6 class="mb-0">
+                        <i class="fas fa-cog me-2"></i>分类管理（管理员）
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="input-group">
+                                <input type="text" id="newCategoryKey" class="form-control" 
+                                       placeholder="分类键（如：custom_layer）">
+                                <input type="text" id="newCategoryLabel" class="form-control" 
+                                       placeholder="分类标签（如：Custom Layer）">
+                                <button class="btn btn-success" id="addCategoryBtn">
+                                    <i class="fas fa-plus"></i> 添加分类
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <textarea id="newCategoryDesc" class="form-control" 
+                                      placeholder="分类描述（可选）" rows="2"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- 模型配置生成区域 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-success">
+                <div class="card-header bg-success text-white">
+                    <h6 class="mb-0">
+                        <i class="fas fa-cogs me-2"></i>模型配置生成
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label class="form-label">选择Base模板（多选）：</label>
+                            <div id="baseTemplatesContainer" class="border rounded p-3" style="max-height: 200px; overflow-y: auto;">
+                                <div class="text-center text-muted">
+                                    <i class="fas fa-spinner fa-spin"></i> 加载中...
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">已选择的模块：</label>
+                            <div id="selectedModulesDisplay" class="border rounded p-3" style="max-height: 200px; overflow-y: auto;">
+                                <div class="text-muted">请从左侧选择模块</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-12 text-center">
+                            <button id="generateConfigBtn" class="btn btn-lg btn-primary">
+                                <i class="fas fa-magic me-2"></i>生成模型配置
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 命令执行结果模态框 -->
+    <div class="modal fade" id="commandResultModal" tabindex="-1" aria-labelledby="commandResultModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="commandResultModalLabel">
+                        <i class="fas fa-terminal me-2"></i>模型配置生成结果
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="commandInfo" class="mb-3">
+                        <h6><i class="fas fa-code me-2"></i>执行命令：</h6>
+                        <div class="bg-dark text-light p-3 rounded">
+                            <code id="commandText"></code>
+                        </div>
+                    </div>
+                    <div id="commandOutput">
+                        <h6><i class="fas fa-scroll me-2"></i>控制台输出：</h6>
+                        <div class="bg-dark text-light p-3 rounded" style="max-height: 400px; overflow-y: auto;">
+                            <pre id="outputText" class="mb-0 text-light"></pre>
+                        </div>
+                    </div>
+                    <div id="commandStatus" class="mt-3">
+                        <h6><i class="fas fa-info-circle me-2"></i>执行状态：</h6>
+                        <div id="statusInfo" class="alert" role="alert"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-2"></i>关闭
+                    </button>
+                    <button type="button" class="btn btn-primary" id="copyCommandBtn">
+                        <i class="fas fa-copy me-2"></i>复制命令
+                    </button>
                 </div>
             </div>
         </div>
@@ -785,5 +952,348 @@ function getCookie(name) {
     }
     return cookieValue;
 }
+
+// 新功能：分类管理（管理员）
+{% if is_admin %}
+// 添加新分类
+document.getElementById('addCategoryBtn').addEventListener('click', function() {
+    const key = document.getElementById('newCategoryKey').value.trim();
+    const label = document.getElementById('newCategoryLabel').value.trim();
+    const description = document.getElementById('newCategoryDesc').value.trim();
+    
+    if (!key || !label) {
+        alert('请填写分类键和标签');
+        return;
+    }
+    
+    fetch('/modules/api/manage-categories/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({
+            key: key,
+            label: label,
+            description: description
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            location.reload();
+        } else {
+            alert('添加分类失败: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('添加分类错误:', error);
+        alert('添加分类失败: 网络错误');
+    });
+});
+
+// 删除分类
+document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('delete-category-btn') || e.target.closest('.delete-category-btn')) {
+        const btn = e.target.classList.contains('delete-category-btn') ? e.target : e.target.closest('.delete-category-btn');
+        const category = btn.getAttribute('data-category');
+        const categoryLabel = btn.getAttribute('data-category-label');
+        
+        if (confirm(`确定要删除分类 "${categoryLabel}" 吗？\n该分类下的所有模块将被移动到 "Other" 分类。`)) {
+            fetch('/modules/api/manage-categories/', {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: JSON.stringify({
+                    key: category
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message);
+                    location.reload();
+                } else {
+                    alert('删除分类失败: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('删除分类错误:', error);
+                alert('删除分类失败: 网络错误');
+            });
+        }
+    }
+});
+{% endif %}
+
+// 模块选择功能
+let selectedModules = [];
+
+// 分类多选框处理
+document.addEventListener('change', function(e) {
+    if (e.target.classList.contains('category-checkbox')) {
+        const category = e.target.getAttribute('data-category');
+        const categoryLabel = e.target.getAttribute('data-category-label');
+        const isChecked = e.target.checked;
+        
+        // 选中/取消选中该分类下的所有模块
+        const moduleCheckboxes = document.querySelectorAll(`input[data-module-category="${category}"]`);
+        moduleCheckboxes.forEach(checkbox => {
+            checkbox.checked = isChecked;
+            handleModuleSelection(checkbox);
+        });
+    }
+    
+    if (e.target.classList.contains('module-checkbox')) {
+        handleModuleSelection(e.target);
+        
+        // 检查该分类的模块是否全部选中或全部未选中
+        const category = e.target.getAttribute('data-module-category');
+        const categoryCheckbox = document.getElementById(`category_${category}`);
+        if (categoryCheckbox) {
+            const categoryModules = document.querySelectorAll(`input[data-module-category="${category}"]`);
+            const checkedModules = document.querySelectorAll(`input[data-module-category="${category}"]:checked`);
+            
+            if (checkedModules.length === categoryModules.length) {
+                categoryCheckbox.checked = true;
+                categoryCheckbox.indeterminate = false;
+            } else if (checkedModules.length === 0) {
+                categoryCheckbox.checked = false;
+                categoryCheckbox.indeterminate = false;
+            } else {
+                categoryCheckbox.indeterminate = true;
+            }
+        }
+    }
+});
+
+// 处理模块选择
+function handleModuleSelection(checkbox) {
+    const moduleName = checkbox.getAttribute('data-module-name');
+    const moduleCategory = checkbox.getAttribute('data-module-category');
+    const moduleId = checkbox.getAttribute('data-module-id');
+    
+    if (checkbox.checked) {
+        // 添加到选择列表
+        if (!selectedModules.find(m => m.name === moduleName)) {
+            selectedModules.push({
+                name: moduleName,
+                category: moduleCategory,
+                id: moduleId
+            });
+        }
+    } else {
+        // 从选择列表移除
+        selectedModules = selectedModules.filter(m => m.name !== moduleName);
+    }
+    
+    updateSelectedModulesDisplay();
+}
+
+// 更新已选择模块的显示
+function updateSelectedModulesDisplay() {
+    const container = document.getElementById('selectedModulesDisplay');
+    
+    if (selectedModules.length === 0) {
+        container.innerHTML = '<div class="text-muted">请从左侧选择模块</div>';
+        return;
+    }
+    
+    // 按分类组织显示
+    const modulesByCategory = {};
+    selectedModules.forEach(module => {
+        if (!modulesByCategory[module.category]) {
+            modulesByCategory[module.category] = [];
+        }
+        modulesByCategory[module.category].push(module);
+    });
+    
+    let html = '';
+    Object.keys(modulesByCategory).forEach(category => {
+        const categoryLabel = category.toUpperCase();
+        const modules = modulesByCategory[category];
+        
+        html += `
+            <div class="mb-2">
+                <strong class="text-primary">${categoryLabel} (${modules.length})</strong>
+                <div class="ms-3">
+                    ${modules.map(m => `<span class="badge bg-secondary me-1">${m.name}</span>`).join('')}
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+// Base模板加载和选择
+let selectedBases = [];
+
+// 页面加载时获取base模板
+document.addEventListener('DOMContentLoaded', function() {
+    loadBaseTemplates();
+});
+
+function loadBaseTemplates() {
+    fetch('/modules/api/base-templates/', {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        const container = document.getElementById('baseTemplatesContainer');
+        
+        if (data.success) {
+            if (data.base_templates.length > 0) {
+                let html = '';
+                data.base_templates.forEach(template => {
+                    html += `
+                        <div class="form-check">
+                            <input class="form-check-input base-template-checkbox" type="checkbox" 
+                                   value="${template.name}" id="base_${template.name}">
+                            <label class="form-check-label" for="base_${template.name}">
+                                ${template.name}
+                            </label>
+                        </div>
+                    `;
+                });
+                container.innerHTML = html;
+                
+                // 添加base模板选择事件
+                container.addEventListener('change', function(e) {
+                    if (e.target.classList.contains('base-template-checkbox')) {
+                        const baseName = e.target.value;
+                        if (e.target.checked) {
+                            if (!selectedBases.includes(baseName)) {
+                                selectedBases.push(baseName);
+                            }
+                        } else {
+                            selectedBases = selectedBases.filter(b => b !== baseName);
+                        }
+                    }
+                });
+            } else {
+                container.innerHTML = '<div class="text-muted">未找到base模板</div>';
+            }
+        } else {
+            container.innerHTML = `<div class="text-danger">加载失败: ${data.error}</div>`;
+        }
+    })
+    .catch(error => {
+        console.error('加载base模板错误:', error);
+        document.getElementById('baseTemplatesContainer').innerHTML = 
+            '<div class="text-danger">加载失败: 网络错误</div>';
+    });
+}
+
+// 生成模型配置并执行命令
+document.getElementById('generateConfigBtn').addEventListener('click', function() {
+    if (selectedModules.length === 0) {
+        alert('请至少选择一个模块');
+        return;
+    }
+    
+    if (selectedBases.length === 0) {
+        alert('请至少选择一个base模板');
+        return;
+    }
+    
+    const btn = this;
+    const originalText = btn.innerHTML;
+    
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>执行中...';
+    
+    // 构建选中的模块数据结构
+    const selectedModulesData = {};
+    selectedModules.forEach(module => {
+        const category = module.category;
+        if (!selectedModulesData[category]) {
+            selectedModulesData[category] = [];
+        }
+        selectedModulesData[category].push(module.name);
+    });
+    
+    fetch('/modules/api/execute-config/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({
+            base_templates: selectedBases,
+            selected_modules: selectedModulesData
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+        
+        if (data.success) {
+            // 显示执行结果模态框
+            showCommandResult(data);
+        } else {
+            alert('执行命令失败: ' + data.error);
+        }
+    })
+    .catch(error => {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+        console.error('执行命令错误:', error);
+        alert('执行命令失败: 网络错误');
+    });
+});
+
+// 显示命令执行结果
+function showCommandResult(data) {
+    // 设置命令文本
+    document.getElementById('commandText').textContent = data.command;
+    
+    // 设置输出文本
+    document.getElementById('outputText').textContent = data.output || '无输出';
+    
+    // 设置状态信息
+    const statusDiv = document.getElementById('statusInfo');
+    if (data.return_code === 0) {
+        statusDiv.className = 'alert alert-success';
+        statusDiv.innerHTML = `<i class="fas fa-check-circle me-2"></i>命令执行成功 (退出码: 0)<br>
+                              <small>执行时间: ${data.execution_time || '未知'} | 时间戳: ${data.timestamp || '未知'}</small>`;
+    } else {
+        statusDiv.className = 'alert alert-danger';
+        statusDiv.innerHTML = `<i class="fas fa-exclamation-circle me-2"></i>命令执行失败 (退出码: ${data.return_code})<br>
+                              <small>执行时间: ${data.execution_time || '未知'} | 时间戳: ${data.timestamp || '未知'}</small>`;
+    }
+    
+    // 显示模态框
+    const modal = new bootstrap.Modal(document.getElementById('commandResultModal'));
+    modal.show();
+}
+
+// 复制命令按钮功能
+document.getElementById('copyCommandBtn').addEventListener('click', function() {
+    const commandText = document.getElementById('commandText').textContent;
+    navigator.clipboard.writeText(commandText).then(function() {
+        // 临时改变按钮文本
+        const btn = document.getElementById('copyCommandBtn');
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-check me-2"></i>已复制';
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-success');
+        
+        setTimeout(function() {
+            btn.innerHTML = originalText;
+            btn.classList.remove('btn-success');
+            btn.classList.add('btn-primary');
+        }, 1500);
+    }).catch(function() {
+        alert('复制失败，请手动选择复制');
+    });
+});
 </script>
 {% endblock %}

@@ -13,11 +13,57 @@ class ModuleCategory(models.TextChoices):
     """模块分类枚举"""
     ATTENTION = 'attention', 'Attention'
     CONVOLUTION = 'convolution', 'Convolution'
-    DOWN_UP = 'down_up', 'Down&Up'
+    DOWNSAMPLE = 'downsample', 'Downsample'
     FUSION = 'fusion', 'Fusion'
     HEAD = 'head', 'Head'
     BLOCK = 'block', 'Block'
     OTHER = 'other', 'Other'
+
+
+class DynamicModuleCategory(models.Model):
+    """
+    动态模块分类管理
+    支持管理员添加/删除分类
+    """
+    key = models.CharField(max_length=50, unique=True, verbose_name="分类键")
+    label = models.CharField(max_length=100, verbose_name="分类标签")
+    description = models.TextField(blank=True, verbose_name="分类描述")
+    is_default = models.BooleanField(default=False, verbose_name="是否为默认分类")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="创建者")
+    
+    class Meta:
+        verbose_name = "动态模块分类"
+        verbose_name_plural = "动态模块分类"
+        ordering = ['key']
+    
+    def __str__(self):
+        return f"{self.label} ({self.key})"
+    
+    @classmethod
+    def get_all_categories(cls):
+        """获取所有分类（包括默认分类和动态分类）"""
+        categories = []
+        
+        # 添加默认的固定分类
+        for choice in ModuleCategory.choices:
+            categories.append({
+                'key': choice[0],
+                'label': choice[1],
+                'is_default': True,
+                'is_deletable': choice[0] != 'other'  # Other分类不可删除
+            })
+        
+        # 添加动态分类
+        for category in cls.objects.all():
+            categories.append({
+                'key': category.key,
+                'label': category.label,
+                'is_default': False,
+                'is_deletable': True
+            })
+        
+        return categories
 
 
 class ModuleFile(models.Model):
@@ -111,10 +157,9 @@ class ModuleItem(models.Model):
     module_file = models.ForeignKey(ModuleFile, on_delete=models.CASCADE, 
                                     related_name='module_items', verbose_name="模块文件")
     
-    # 模块信息
+    # 模块信息 - 使用字符串字段支持动态分类
     name = models.CharField(max_length=255, verbose_name="模块名称")
-    category = models.CharField(max_length=20, choices=ModuleCategory.choices, 
-                                default=ModuleCategory.OTHER, verbose_name="模块分类")
+    category = models.CharField(max_length=50, default='other', verbose_name="模块分类")
     
     # 元数据
     description = models.TextField(blank=True, verbose_name="模块描述")
@@ -134,6 +179,20 @@ class ModuleItem(models.Model):
     
     def __str__(self):
         return f"{self.name} ({self.get_category_display()}) - {self.module_file.name}"
+    
+    def get_category_display(self):
+        """获取分类显示名称"""
+        # 首先检查是否是默认分类
+        for choice in ModuleCategory.choices:
+            if choice[0] == self.category:
+                return choice[1]
+        
+        # 检查动态分类
+        try:
+            dynamic_cat = DynamicModuleCategory.objects.get(key=self.category)
+            return dynamic_cat.label
+        except DynamicModuleCategory.DoesNotExist:
+            return self.category.title()
     
     @property
     def file_path(self):

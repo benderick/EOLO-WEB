@@ -13,8 +13,9 @@ from django.contrib import messages
 from django.core.paginator import Paginator
 from django.utils import timezone
 from django.db.models import Count, Q
+from django.conf import settings
 from .file_manager import module_file_manager
-from .models import ModuleFile, ModuleEditSession, ModuleItem, ModuleCategory
+from .models import ModuleFile, ModuleEditSession, ModuleItem, ModuleCategory, DynamicModuleCategory
 from .module_analyzer import module_analyzer, ModuleAnalyzer
 
 
@@ -39,22 +40,29 @@ def modules_list_view(request):
         }
         
         # 获取模块列表（按分类分组）
+        all_categories = DynamicModuleCategory.get_all_categories()
         module_items_by_category = {}
-        for category in ModuleCategory:
-            modules = ModuleItem.objects.filter(category=category.value).select_related('module_file')
-            module_items_by_category[category] = {
-                'label': category.label,
-                'value': category.value,
+        
+        for cat_info in all_categories:
+            cat_key = cat_info['key']
+            modules = ModuleItem.objects.filter(category=cat_key).select_related('module_file')
+            module_items_by_category[cat_key] = {
+                'label': cat_info['label'],
+                'value': cat_key,
                 'modules': modules,
-                'count': modules.count()
+                'count': modules.count(),
+                'is_deletable': cat_info['is_deletable']
             }
         
         # 模块统计
         module_stats = {
             'total_modules': ModuleItem.objects.count(),
             'total_files_with_modules': ModuleFile.objects.filter(module_items__isnull=False).distinct().count(),
-            'categories_count': {category.value: count['count'] for category, count in module_items_by_category.items()},
+            'categories_count': {category_key: category_info['count'] for category_key, category_info in module_items_by_category.items()},
         }
+        
+        # 获取所有分类（包括动态分类）
+        all_categories = DynamicModuleCategory.get_all_categories()
         
         context = {
             'file_tree': file_tree,
@@ -62,6 +70,8 @@ def modules_list_view(request):
             'stats': stats,
             'module_items_by_category': module_items_by_category,
             'module_stats': module_stats,
+            'all_categories': all_categories,
+            'is_admin': request.user.is_superuser,
             'workpieces_dir': str(module_file_manager.workpieces_dir),
         }
         
@@ -666,13 +676,18 @@ def get_modules_by_category_api(request):
         if category:
             modules_query = modules_query.filter(category=category)
         
+        # 获取所有分类（包括动态分类）
+        all_categories = DynamicModuleCategory.get_all_categories()
+        
         # 按分类分组
         modules_by_category = {}
-        for cat in ModuleCategory:
-            cat_modules = modules_query.filter(category=cat.value)
-            modules_by_category[cat.value] = {
-                'label': cat.label,
+        for cat_info in all_categories:
+            cat_key = cat_info['key']
+            cat_modules = modules_query.filter(category=cat_key)
+            modules_by_category[cat_key] = {
+                'label': cat_info['label'],
                 'count': cat_modules.count(),
+                'is_deletable': cat_info['is_deletable'],
                 'modules': [
                     {
                         'id': module.id,
@@ -847,4 +862,372 @@ def analyze_file_api(request):
         return JsonResponse({
             'success': False,
             'error': f'分析文件失败: {str(e)}'
+        })
+
+
+@require_http_methods(["GET", "POST", "DELETE"])
+@login_required
+def manage_categories_api(request):
+    """
+    管理动态分类API接口（仅管理员可用）
+    """
+    if not request.user.is_superuser:
+        return JsonResponse({
+            'success': False,
+            'error': '权限不足，仅管理员可操作'
+        })
+    
+    if request.method == 'GET':
+        # 获取所有分类
+        categories = DynamicModuleCategory.get_all_categories()
+        return JsonResponse({
+            'success': True,
+            'categories': categories
+        })
+    
+    elif request.method == 'POST':
+        # 添加新分类
+        try:
+            data = json.loads(request.body)
+            key = data.get('key', '').strip()
+            label = data.get('label', '').strip()
+            description = data.get('description', '').strip()
+            
+            if not key or not label:
+                return JsonResponse({
+                    'success': False,
+                    'error': '分类键和标签不能为空'
+                })
+            
+            # 检查是否与默认分类冲突
+            default_keys = [choice[0] for choice in ModuleCategory.choices]
+            if key in default_keys:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'分类键 "{key}" 与系统默认分类冲突'
+                })
+            
+            # 创建新分类
+            category = DynamicModuleCategory.objects.create(
+                key=key,
+                label=label,
+                description=description,
+                created_by=request.user
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'成功添加分类 "{label}"',
+                'category': {
+                    'key': category.key,
+                    'label': category.label,
+                    'description': category.description
+                }
+            })
+            
+        except Exception as e:
+            return JsonResponse({
+                'success': False, 
+                'error': f'添加分类失败: {str(e)}'
+            })
+    
+    elif request.method == 'DELETE':
+        # 删除分类
+        try:
+            data = json.loads(request.body)
+            key = data.get('key', '').strip()
+            
+            if not key:
+                return JsonResponse({
+                    'success': False,
+                    'error': '分类键不能为空'
+                })
+            
+            # 检查是否为默认分类
+            default_keys = [choice[0] for choice in ModuleCategory.choices]
+            if key in default_keys:
+                if key == 'other':
+                    return JsonResponse({
+                        'success': False,
+                        'error': '"Other" 分类不能删除'
+                    })
+                else:
+                    return JsonResponse({
+                        'success': False,
+                        'error': '系统默认分类不能删除'
+                    })
+            
+            # 删除动态分类
+            try:
+                category = DynamicModuleCategory.objects.get(key=key)
+                category_label = category.label
+                
+                # 将该分类下的所有模块转移到 "other" 分类
+                updated_count = ModuleItem.objects.filter(category=key).update(category='other')
+                
+                # 删除分类
+                category.delete()
+                
+                return JsonResponse({
+                    'success': True,
+                    'message': f'成功删除分类 "{category_label}"，{updated_count} 个模块已转移到 "Other" 分类'
+                })
+                
+            except DynamicModuleCategory.DoesNotExist:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'分类 "{key}" 不存在'
+                })
+            
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': f'删除分类失败: {str(e)}'
+            })
+
+
+@require_http_methods(["GET"])
+@login_required
+def get_base_templates_api(request):
+    """
+    获取base模板列表API接口
+    """
+    try:
+        from django.conf import settings
+        
+        # 获取EOLO_MODEL_TEMPLATE_DIR目录
+        template_dir = getattr(settings, 'EOLO_MODEL_TEMPLATE_DIR', None)
+        if not template_dir:
+            return JsonResponse({
+                'success': False,
+                'error': 'EOLO_MODEL_TEMPLATE_DIR 未配置'
+            })
+        
+        template_path = Path(template_dir)
+        if not template_path.exists():
+            return JsonResponse({
+                'success': False,
+                'error': f'模板目录不存在: {template_path}'
+            })
+        
+        # 获取所有文件（不显示扩展名）
+        base_templates = []
+        for file_path in template_path.iterdir():
+            if file_path.is_file():
+                # 去掉扩展名
+                name = file_path.stem
+                base_templates.append({
+                    'name': name,
+                    'full_name': file_path.name,
+                    'path': str(file_path)
+                })
+        
+        # 按名称排序
+        base_templates.sort(key=lambda x: x['name'])
+        
+        return JsonResponse({
+            'success': True,
+            'base_templates': base_templates,
+            'template_dir': str(template_path)
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': f'获取base模板失败: {str(e)}'
+        })
+
+
+@require_http_methods(["POST"])
+@login_required  
+def generate_model_config_api(request):
+    """
+    生成模型配置API接口
+    """
+    try:
+        data = json.loads(request.body)
+        selected_modules = data.get('selected_modules', [])
+        selected_bases = data.get('selected_bases', [])
+        
+        # 获取当前用户
+        username = request.user.username
+        
+        # 生成时间戳
+        import time
+        timestamp = f"t{int(time.time() * 1000)}"
+        
+        # 构建配置信息
+        config_info = {
+            'base': ','.join(selected_bases) if selected_bases else '',
+            'modules': {},
+            'user': username,
+            'mod_timestamp': timestamp
+        }
+        
+        # 按分类组织模块
+        for module_info in selected_modules:
+            category = module_info.get('category', 'other').upper()
+            module_name = module_info.get('name', '')
+            
+            if category not in config_info['modules']:
+                config_info['modules'][category] = []
+            config_info['modules'][category].append(module_name)
+        
+        # 格式化输出字符串
+        parts = []
+        
+        # 添加base信息
+        if config_info['base']:
+            parts.append(f"base={config_info['base']}")
+        
+        # 添加模块信息
+        for category, modules in config_info['modules'].items():
+            if modules:
+                parts.append(f"{category}={','.join(modules)}")
+        
+        # 添加用户和时间戳
+        parts.append(f"user={config_info['user']}")
+        parts.append(f"mod_timestamp={config_info['mod_timestamp']}")
+        
+        config_string = ' '.join(parts)
+        
+        return JsonResponse({
+            'success': True,
+            'config_string': config_string,
+            'config_info': config_info
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': f'生成配置失败: {str(e)}'
+        })
+
+
+@login_required
+@require_http_methods(["POST"])
+def execute_model_config_api(request):
+    """
+    执行模型配置生成命令
+    """
+    try:
+        import subprocess
+        import json
+        from datetime import datetime
+        import os
+        import threading
+        import queue
+        import time
+        
+        data = json.loads(request.body)
+        
+        # 获取数据
+        base_templates = data.get('base_templates', [])
+        selected_modules = data.get('selected_modules', {})
+        
+        if not base_templates:
+            return JsonResponse({
+                'success': False,
+                'error': '请至少选择一个base模板'
+            })
+            
+        if not any(modules for modules in selected_modules.values()):
+            return JsonResponse({
+                'success': False,
+                'error': '请至少选择一个模块'
+            })
+        
+        # 构建命令
+        base_template = base_templates[0]  # 使用第一个base模板
+        current_time = datetime.now().strftime('%Y-%m-%d-%H-%M')
+        
+        # 构建命令参数
+        cmd_parts = [
+            'uv', 'run', '--quiet', 'src/create.py',
+            f'template={base_template}'
+        ]
+        
+        # 添加模块参数
+        for category, modules in selected_modules.items():
+            if modules:
+                modules_str = ','.join(modules)
+                cmd_parts.append(f'template.{category.upper()}={modules_str}')
+        
+        # 添加用户和时间
+        cmd_parts.extend([
+            f'user={request.user.username}',
+            f'time={current_time}'
+        ])
+        
+        # 在EOLO目录中执行命令
+        eolo_dir = settings.EOLO_DIR
+        
+        if not eolo_dir.exists():
+            return JsonResponse({
+                'success': False,
+                'error': f'EOLO目录不存在: {eolo_dir}'
+            })
+        
+        create_script = eolo_dir / 'src' / 'create.py'
+        if not create_script.exists():
+            return JsonResponse({
+                'success': False,
+                'error': f'创建脚本不存在: {create_script}'
+            })
+        
+        # 记录开始时间
+        start_time = time.time()
+        
+        try:
+            # 执行命令
+            result = subprocess.run(
+                cmd_parts,
+                cwd=str(eolo_dir),
+                capture_output=True,
+                text=True,
+                timeout=60  # 60秒超时
+            )
+            
+            # 计算执行时间
+            execution_time = time.time() - start_time
+            
+            # 合并输出
+            output = result.stdout
+            if result.stderr:
+                output += "\n=== STDERR ===\n" + result.stderr
+            
+            # 生成的命令字符串
+            command_str = ' '.join(cmd_parts)
+            
+            return JsonResponse({
+                'success': True,
+                'command': command_str,
+                'output': output or '(无输出)',
+                'return_code': result.returncode,
+                'execution_time': f'{execution_time:.2f}秒',
+                'timestamp': current_time
+            })
+            
+        except subprocess.TimeoutExpired:
+            return JsonResponse({
+                'success': False,
+                'error': '命令执行超时 (60秒)'
+            })
+        except subprocess.CalledProcessError as e:
+            return JsonResponse({
+                'success': False,
+                'error': f'命令执行失败: {e}',
+                'output': e.output if hasattr(e, 'output') else '',
+                'return_code': e.returncode if hasattr(e, 'returncode') else -1
+            })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': '无效的JSON数据'
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': f'执行命令失败: {str(e)}'
         })

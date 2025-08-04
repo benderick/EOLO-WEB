@@ -2,7 +2,52 @@
 模块管理 Django Admin 配置
 """
 from django.contrib import admin
-from .models import ModuleFile, ModuleEditSession, ModuleItem
+from .models import ModuleFile, ModuleEditSession, ModuleItem, DynamicModuleCategory
+
+
+@admin.register(DynamicModuleCategory)
+class DynamicModuleCategoryAdmin(admin.ModelAdmin):
+    """动态模块分类管理（仅管理员可见）"""
+    list_display = ('key', 'label', 'description', 'is_default', 'created_by', 'created_at')
+    list_filter = ('is_default', 'created_at', 'created_by')
+    search_fields = ('key', 'label', 'description')
+    readonly_fields = ('created_at', 'created_by')
+    ordering = ['key']
+    
+    fieldsets = (
+        ('基本信息', {
+            'fields': ('key', 'label', 'description')
+        }),
+        ('元数据', {
+            'fields': ('is_default', 'created_by', 'created_at')
+        }),
+    )
+    
+    def save_model(self, request, obj, form, change):
+        """保存时自动设置创建者"""
+        if not change:  # 仅在创建时设置
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+    
+    def has_module_permission(self, request):
+        """只有管理员可以访问此模块"""
+        return request.user.is_superuser
+    
+    def has_view_permission(self, request, obj=None):
+        """只有管理员可以查看"""
+        return request.user.is_superuser
+    
+    def has_add_permission(self, request):
+        """只有管理员可以添加"""
+        return request.user.is_superuser
+    
+    def has_change_permission(self, request, obj=None):
+        """只有管理员可以修改"""
+        return request.user.is_superuser
+    
+    def has_delete_permission(self, request, obj=None):
+        """只有管理员可以删除"""
+        return request.user.is_superuser
 
 
 @admin.register(ModuleFile)

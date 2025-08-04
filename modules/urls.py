@@ -28,4 +28,16 @@ urlpatterns = [
     path('api/classify-module/', views.classify_module_api, name='classify_module'),
     path('api/modules-by-category/', views.get_modules_by_category_api, name='modules_by_category'),
     path('api/analyze-file/', views.analyze_file_api, name='analyze_file'),
+    
+    # 分类管理API（仅管理员）
+    path('api/manage-categories/', views.manage_categories_api, name='manage_categories'),
+    
+    # Base模板API
+    path('api/base-templates/', views.get_base_templates_api, name='base_templates'),
+    
+    # 模型配置生成API
+    path('api/generate-config/', views.generate_model_config_api, name='generate_config'),
+    
+    # 执行模型配置命令API
+    path('api/execute-config/', views.execute_model_config_api, name='execute_config'),
 ]
