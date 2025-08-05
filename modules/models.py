@@ -9,6 +9,13 @@ from django.conf import settings
 User = get_user_model()
 
 
+class FileStatus(models.TextChoices):
+    """文件状态枚举"""
+    UNREVIEWED = 'unreviewed', '未审查'  # ⭕
+    AVAILABLE = 'available', '可用'      # ✔
+    UNAVAILABLE = 'unavailable', '不可用' # ❌
+
+
 class ModuleCategory(models.TextChoices):
     """模块分类枚举"""
     ATTENTION = 'attention', 'Attention'
@@ -75,10 +82,27 @@ class ModuleFile(models.Model):
     relative_path = models.CharField(max_length=500, verbose_name="相对路径")
     size = models.BigIntegerField(verbose_name="文件大小(字节)")
     
+    # 文件状态
+    status = models.CharField(
+        max_length=20, 
+        choices=FileStatus.choices, 
+        default=FileStatus.UNREVIEWED,
+        verbose_name="文件状态"
+    )
+    
     # 元数据
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
     uploaded_by = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="上传者")
+    status_updated_by = models.ForeignKey(
+        User, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='status_updated_files',
+        verbose_name="状态更新者"
+    )
+    status_updated_at = models.DateTimeField(null=True, blank=True, verbose_name="状态更新时间")
     
     # 文件内容缓存（可选）
     content_hash = models.CharField(max_length=64, blank=True, verbose_name="文件哈希")
@@ -129,6 +153,29 @@ class ModuleFile(models.Model):
             return True, "文件保存成功"
         except Exception as e:
             return False, f"保存失败: {str(e)}"
+    
+    @property
+    def status_icon(self):
+        """获取状态图标"""
+        status_icons = {
+            FileStatus.UNREVIEWED: '⭕',
+            FileStatus.AVAILABLE: '✔',
+            FileStatus.UNAVAILABLE: '❌'
+        }
+        return status_icons.get(self.status, '⭕')
+    
+    @property
+    def status_display(self):
+        """获取状态显示文本"""
+        return self.get_status_display()
+    
+    def update_status(self, new_status, user):
+        """更新文件状态"""
+        from django.utils import timezone
+        self.status = new_status
+        self.status_updated_by = user
+        self.status_updated_at = timezone.now()
+        self.save(update_fields=['status', 'status_updated_by', 'status_updated_at'])
 
 
 class ModuleEditSession(models.Model):

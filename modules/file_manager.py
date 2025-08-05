@@ -77,7 +77,24 @@ class ModuleFileManager:
         files = self.scan_python_files()
         tree = {'files': []}  # 根目录可以有文件
         
+        # 获取所有文件的状态信息
+        module_files = {mf.relative_path: mf for mf in ModuleFile.objects.all()}
+        
         for file_info in files:
+            relative_path = file_info['relative_path']
+            
+            # 添加状态信息
+            module_file = module_files.get(relative_path)
+            if module_file:
+                file_info['status'] = module_file.status
+                file_info['status_icon'] = module_file.status_icon
+                file_info['status_display'] = module_file.status_display
+            else:
+                # 默认状态：未审查
+                file_info['status'] = 'unreviewed'
+                file_info['status_icon'] = '⭕'
+                file_info['status_display'] = '未审查'
+            
             path_parts = Path(file_info['relative_path']).parts
             
             if len(path_parts) == 1:
@@ -298,6 +315,45 @@ class ModuleFileManager:
             })
         
         return dir_list
+    
+    def update_file_status(self, relative_path: str, new_status: str, user) -> Tuple[bool, str]:
+        """
+        更新文件状态
+        
+        Args:
+            relative_path: 文件相对路径
+            new_status: 新状态 (unreviewed, available, unavailable)
+            user: 操作用户
+            
+        Returns:
+            Tuple[bool, str]: (成功标志, 消息)
+        """
+        try:
+            # 验证状态值
+            from .models import FileStatus
+            if new_status not in [choice[0] for choice in FileStatus.choices]:
+                return False, "无效的状态值"
+                
+            # 获取或创建模块文件记录
+            module_file, created = ModuleFile.objects.get_or_create(
+                relative_path=relative_path,
+                defaults={
+                    'name': Path(relative_path).name,
+                    'size': 0,
+                    'uploaded_by': user,
+                    'status': new_status
+                }
+            )
+            
+            if not created:
+                # 更新现有记录的状态
+                module_file.update_status(new_status, user)
+            
+            status_display = module_file.get_status_display()
+            return True, f"文件状态已更新为: {status_display}"
+            
+        except Exception as e:
+            return False, f"更新状态失败: {str(e)}"
 
 
 # 全局文件管理器实例

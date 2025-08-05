@@ -518,12 +518,13 @@ class ModelFileManager:
                 file_path.unlink()
                 return True, "文件删除成功"
             elif file_path.is_dir():
-                # 删除空文件夹
+                # 递归删除文件夹及其所有内容
                 try:
-                    file_path.rmdir()
+                    import shutil
+                    shutil.rmtree(file_path)
                     return True, "文件夹删除成功"
-                except OSError:
-                    return False, "文件夹不为空，无法删除"
+                except Exception as e:
+                    return False, f"删除文件夹失败: {str(e)}"
             
         except Exception as e:
             return False, f"删除文件时出错: {str(e)}"

@@ -22,6 +22,7 @@ urlpatterns = [
     path('api/close-session/', views.close_edit_session, name='close_session'),
     path('api/enter-edit/', views.enter_edit_mode, name='enter_edit'),
     path('api/test-python/', views.test_python_file, name='test_python'),
+    path('api/update-file-status/', views.update_file_status_api, name='update_file_status'),
     
     # 模块管理API
     path('api/scan-modules/', views.scan_modules_api, name='scan_modules'),
@@ -34,9 +35,6 @@ urlpatterns = [
     
     # Base模板API
     path('api/base-templates/', views.get_base_templates_api, name='base_templates'),
-    
-    # 模型配置生成API
-    path('api/generate-config/', views.generate_model_config_api, name='generate_config'),
     
     # 执行模型配置命令API
     path('api/execute-config/', views.execute_model_config_api, name='execute_config'),

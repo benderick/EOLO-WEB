@@ -33,10 +33,40 @@ def modules_list_view(request):
         
         # 统计信息
         all_files = module_file_manager.scan_python_files()
+        
+        # 确保所有扫描到的文件都在数据库中有记录
+        for file_info in all_files:
+            relative_path = file_info['relative_path']
+            ModuleFile.objects.get_or_create(
+                relative_path=relative_path,
+                defaults={
+                    'name': file_info['name'],
+                    'size': file_info['size'],
+                    'status': 'unreviewed',  # 默认状态
+                    'uploaded_by': request.user
+                }
+            )
+        
+        # 删除数据库中不存在的文件记录
+        existing_paths = [f['relative_path'] for f in all_files]
+        ModuleFile.objects.exclude(relative_path__in=existing_paths).delete()
+        
+        # 获取准确的文件状态统计
+        status_count = ModuleFile.objects.values('status').annotate(count=Count('status'))
+        status_stats = {item['status']: item['count'] for item in status_count}
+        
+        # 确保所有状态都有值
+        total_db_files = sum(status_stats.values())
+        
         stats = {
             'total_files': len(all_files),
             'total_size': sum(f['size'] for f in all_files),
             'total_directories': len(directories),
+            'status_count': {
+                'unreviewed': status_stats.get('unreviewed', 0),
+                'available': status_stats.get('available', 0),
+                'unavailable': status_stats.get('unavailable', 0),
+            }
         }
         
         # 获取模块列表（按分类分组）
@@ -1040,72 +1070,6 @@ def get_base_templates_api(request):
         })
 
 
-@require_http_methods(["POST"])
-@login_required  
-def generate_model_config_api(request):
-    """
-    生成模型配置API接口
-    """
-    try:
-        data = json.loads(request.body)
-        selected_modules = data.get('selected_modules', [])
-        selected_bases = data.get('selected_bases', [])
-        
-        # 获取当前用户
-        username = request.user.username
-        
-        # 生成时间戳
-        import time
-        timestamp = f"t{int(time.time() * 1000)}"
-        
-        # 构建配置信息
-        config_info = {
-            'base': ','.join(selected_bases) if selected_bases else '',
-            'modules': {},
-            'user': username,
-            'mod_timestamp': timestamp
-        }
-        
-        # 按分类组织模块
-        for module_info in selected_modules:
-            category = module_info.get('category', 'other').upper()
-            module_name = module_info.get('name', '')
-            
-            if category not in config_info['modules']:
-                config_info['modules'][category] = []
-            config_info['modules'][category].append(module_name)
-        
-        # 格式化输出字符串
-        parts = []
-        
-        # 添加base信息
-        if config_info['base']:
-            parts.append(f"base={config_info['base']}")
-        
-        # 添加模块信息
-        for category, modules in config_info['modules'].items():
-            if modules:
-                parts.append(f"{category}={','.join(modules)}")
-        
-        # 添加用户和时间戳
-        parts.append(f"user={config_info['user']}")
-        parts.append(f"mod_timestamp={config_info['mod_timestamp']}")
-        
-        config_string = ' '.join(parts)
-        
-        return JsonResponse({
-            'success': True,
-            'config_string': config_string,
-            'config_info': config_info
-        })
-        
-    except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'error': f'生成配置失败: {str(e)}'
-        })
-
-
 @login_required
 @require_http_methods(["POST"])
 def execute_model_config_api(request):
@@ -1140,12 +1104,12 @@ def execute_model_config_api(request):
             })
         
         # 构建命令
-        base_template = base_templates[0]  # 使用第一个base模板
+        base_template = ','.join(base_templates)
         current_time = datetime.now().strftime('%Y-%m-%d-%H-%M')
         
         # 构建命令参数
         cmd_parts = [
-            'uv', 'run', '--quiet', 'src/create.py', '-m'
+            'uv', 'run', '--quiet', 'src/create.py', '-m',
             f'template={base_template}'
         ]
         
@@ -1232,4 +1196,59 @@ def execute_model_config_api(request):
         return JsonResponse({
             'success': False,
             'error': f'执行命令失败: {str(e)}'
+        })
+
+
+@login_required
+@require_POST
+def update_file_status_api(request):
+    """
+    更新文件状态的API
+    """
+    try:
+        data = json.loads(request.body)
+        file_path = data.get('file_path')
+        new_status = data.get('status')
+        
+        if not file_path or not new_status:
+            return JsonResponse({
+                'success': False,
+                'message': '缺少必要参数'
+            })
+        
+        # 使用文件管理器更新状态
+        success, message = module_file_manager.update_file_status(
+            file_path, new_status, request.user
+        )
+        
+        if success:
+            # 获取状态图标
+            from .models import FileStatus
+            status_icons = {
+                FileStatus.UNREVIEWED: '⭕',
+                FileStatus.AVAILABLE: '✔',
+                FileStatus.UNAVAILABLE: '❌'
+            }
+            status_icon = status_icons.get(new_status, '⭕')
+            
+            return JsonResponse({
+                'success': True,
+                'message': message,
+                'status_icon': status_icon
+            })
+        else:
+            return JsonResponse({
+                'success': False,
+                'message': message
+            })
+            
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'message': '无效的JSON数据'
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'message': f'更新状态失败: {str(e)}'
         })

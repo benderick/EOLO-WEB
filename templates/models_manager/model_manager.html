@@ -1624,7 +1624,9 @@ function deleteFile() {
     .done(function(response) {
         if (response.success) {
             showSuccess(response.message);
-            reloadFunction();
+            
+            // 局部更新：移除被删除的文件/文件夹节点
+            removeFileTreeNode(target.path, isSettingContext);
             
             // 如果删除的是当前打开的文件，清空编辑器
             if (currentFileObj && currentFileObj.path === target.path) {
@@ -1639,6 +1641,162 @@ function deleteFile() {
     });
     
     $('#context-menu').hide();
+}
+
+function removeFileTreeNode(filePath, isSettingContext) {
+    /**
+     * 从文件树中移除指定路径的节点
+     * @param {string} filePath - 要删除的文件/文件夹路径
+     * @param {boolean} isSettingContext - 是否为设置文件树上下文
+     */
+    try {
+        // 根据上下文选择正确的文件树容器
+        let treeContainers = [];
+        if (isSettingContext) {
+            // 设置文件树有两个容器：default和user
+            treeContainers.push(document.getElementById('setting-default-tree'));
+            treeContainers.push(document.getElementById('setting-user-tree'));
+        } else {
+            // 模型配置文件树也有两个容器：common和user
+            treeContainers.push(document.getElementById('common-tree'));
+            treeContainers.push(document.getElementById('user-tree'));
+        }
+        
+        let nodeRemoved = false;
+        
+        // 在所有容器中查找并移除节点
+        for (let treeContainer of treeContainers) {
+            if (!treeContainer) continue;
+            
+            // 找到对应的节点元素 (使用 tree-node 类和 data-path 属性)
+            let nodeElement = treeContainer.querySelector(`.tree-node[data-path="${filePath}"]`);
+            if (!nodeElement) continue;
+            
+            // 找到包含该节点的 <li> 元素
+            let listItem = nodeElement.closest('li');
+            if (!listItem) {
+                // 如果节点不在 <li> 中，直接移除节点本身
+                listItem = nodeElement;
+            }
+            
+            // 如果是文件夹节点，还需要移除其子节点容器
+            let isFolder = nodeElement.getAttribute('data-is-file') === 'false';
+            if (isFolder) {
+                // 查找并移除子节点容器
+                let childrenContainer = listItem.querySelector('ul');
+                if (childrenContainer) {
+                    childrenContainer.remove();
+                }
+            }
+            
+            // 移除整个列表项
+            listItem.remove();
+            nodeRemoved = true;
+            
+            console.log(`成功从文件树中移除节点: ${filePath}`);
+            break; // 找到并移除后就退出循环
+        }
+        
+        if (!nodeRemoved) {
+            console.warn(`未找到路径为 ${filePath} 的节点`);
+            // 如果没有找到节点，可能是路径格式问题，回退到重新加载
+            throw new Error('未找到对应节点');
+        }
+        
+    } catch (error) {
+        console.error('移除文件树节点时出错:', error);
+        // 如果局部更新失败，回退到重新加载整个文件树
+        if (isSettingContext) {
+            loadSettingFileTree();
+        } else {
+            loadFileTree();
+        }
+    }
+}
+
+function addFileTreeNode(parentPath, nodeName, isFile, isSettingContext) {
+    /**
+     * 向文件树中添加新的节点
+     * @param {string} parentPath - 父文件夹路径
+     * @param {string} nodeName - 新节点名称
+     * @param {boolean} isFile - 是否为文件
+     * @param {boolean} isSettingContext - 是否为设置文件树上下文
+     */
+    try {
+        // 构建新节点的完整路径
+        let newNodePath = parentPath ? `${parentPath}/${nodeName}` : nodeName;
+        
+        // 根据上下文选择正确的文件树容器
+        let treeContainers = [];
+        if (isSettingContext) {
+            treeContainers.push(document.getElementById('setting-default-tree'));
+            treeContainers.push(document.getElementById('setting-user-tree'));
+        } else {
+            treeContainers.push(document.getElementById('common-tree'));
+            treeContainers.push(document.getElementById('user-tree'));
+        }
+        
+        let nodeAdded = false;
+        
+        // 在适当的容器中添加节点
+        for (let treeContainer of treeContainers) {
+            if (!treeContainer) continue;
+            
+            let targetContainer = treeContainer;
+            
+            // 如果有父路径，找到父节点的子容器
+            if (parentPath) {
+                let parentNode = treeContainer.querySelector(`.tree-node[data-path="${parentPath}"]`);
+                if (!parentNode) continue;
+                
+                let parentListItem = parentNode.closest('li');
+                if (!parentListItem) continue;
+                
+                // 查找或创建子容器
+                let childContainer = parentListItem.querySelector('ul');
+                if (!childContainer) {
+                    childContainer = document.createElement('ul');
+                    parentListItem.appendChild(childContainer);
+                }
+                targetContainer = childContainer;
+            }
+            
+            // 创建新的节点HTML
+            let iconClass = isFile ? 'fa-file' : 'fa-folder';
+            let cssClass = isFile ? 'file-item' : 'folder-item';
+            
+            let nodeHtml = `
+                <li>
+                    <div class="tree-node ${cssClass}" data-path="${newNodePath}" data-is-file="${isFile}" data-can-edit="true">
+                        <i class="fas ${iconClass}"></i>
+                        <span class="file-name">${nodeName}</span>
+                    </div>
+                </li>
+            `;
+            
+            // 添加节点到容器
+            targetContainer.insertAdjacentHTML('beforeend', nodeHtml);
+            nodeAdded = true;
+            
+            console.log(`成功添加新节点到文件树: ${newNodePath}`);
+            break;
+        }
+        
+        if (!nodeAdded) {
+            console.warn(`无法添加节点，未找到合适的容器`);
+            // 如果局部更新失败，回退到重新加载
+            throw new Error('无法找到父容器');
+        }
+        
+    } catch (error) {
+        console.error('添加文件树节点时出错:', error);
+        // 如果局部更新失败，回退到重新加载整个文件树
+        if (isSettingContext) {
+            loadSettingFileTree();
+        } else {
+            loadFileTree();
+        }
+    }
 }
 
 function createFolderDialog() {
@@ -1697,7 +1855,9 @@ function submitCreateFolder() {
             showSuccess(response.message);
             $('#createFolderModal').modal('hide');
             $('#createFolderForm')[0].reset();
-            loadFileTree();
+            
+            // 局部更新：添加新创建的文件夹节点
+            addFileTreeNode(parentPath, folderName, false, false); // false = 文件夹, false = 设置文件树上下文
         } else {
             showError('创建失败: ' + response.message);
         }
@@ -2130,7 +2290,11 @@ function submitCreateSettingFile() {
             showSuccess(response.message);
             $('#createSettingFileModal').modal('hide');
             $('#createSettingFileForm')[0].reset();
-            loadSettingFileTree();
+            
+            // 尝试局部更新文件树，如果失败则完全重新加载
+            if (!addFileTreeNode(settingFileTreeData, fileName, 'file', true)) {
+                loadSettingFileTree();
+            }
             
             // 加载新创建的文件
             setTimeout(() => {
@@ -2173,7 +2337,11 @@ function submitCreateSettingFolder() {
             showSuccess(response.message);
             $('#createSettingFolderModal').modal('hide');
             $('#createSettingFolderForm')[0].reset();
-            loadSettingFileTree();
+            
+            // 尝试局部更新文件树，如果失败则完全重新加载
+            if (!addFileTreeNode(settingFileTreeData, $('#createSettingFolderForm input[name="name"]').val(), 'folder', true)) {
+                loadSettingFileTree();
+            }
         } else {
             showError('创建失败: ' + response.message);
         }
