@@ -621,6 +621,7 @@ def classify_module_api(request):
         data = json.loads(request.body)
         module_id = data.get('module_id')
         category = data.get('category')
+        description = data.get('description', '')  # 获取描述字段
         
         if not module_id or not category:
             return JsonResponse({'success': False, 'error': '参数不完整'})
@@ -635,9 +636,10 @@ def classify_module_api(request):
         except ModuleItem.DoesNotExist:
             return JsonResponse({'success': False, 'error': '模块项不存在'})
         
-        # 更新分类
+        # 更新分类和描述
         old_category = module_item.get_category_display()
         module_item.category = category
+        module_item.description = description  # 保存描述信息
         module_item.classified_by = request.user
         module_item.save()
         
@@ -1143,7 +1145,7 @@ def execute_model_config_api(request):
         
         # 构建命令参数
         cmd_parts = [
-            'uv', 'run', '--quiet', 'src/create.py',
+            'uv', 'run', '--quiet', 'src/create.py', '-m'
             f'template={base_template}'
         ]
         

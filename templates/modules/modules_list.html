@@ -176,6 +176,451 @@
 .form-check-label h6 {
     margin-bottom: 0;
 }
+
+/* 全新的模块列表设计 - 紧凑四列布局 */
+.modules-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    max-height: 800px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+/* 自定义滚动条样式 */
+.modules-grid::-webkit-scrollbar {
+    width: 8px;
+}
+
+.modules-grid::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.modules-grid::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+    transition: background 0.2s ease;
+}
+
+.modules-grid::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
+.module-category-section {
+    background: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    overflow: hidden;
+    transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    max-height: 420px;
+}
+
+.module-category-section:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+}
+
+/* 分类头部样式 */
+.category-header {
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.category-header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    opacity: 0.1;
+    background: linear-gradient(135deg, var(--category-color) 0%, var(--category-color-dark) 100%);
+}
+
+/* 不同分类的配色方案 */
+.category-attention {
+    --category-color: #8b5cf6;
+    --category-color-dark: #7c3aed;
+    border-left: 4px solid var(--category-color);
+}
+
+.category-convolution {
+    --category-color: #06b6d4;
+    --category-color-dark: #0891b2;
+    border-left: 4px solid var(--category-color);
+}
+
+.category-downsample {
+    --category-color: #10b981;
+    --category-color-dark: #059669;
+    border-left: 4px solid var(--category-color);
+}
+
+.category-fusion {
+    --category-color: #f59e0b;
+    --category-color-dark: #d97706;
+    border-left: 4px solid var(--category-color);
+}
+
+.category-head {
+    --category-color: #ef4444;
+    --category-color-dark: #dc2626;
+    border-left: 4px solid var(--category-color);
+}
+
+.category-block {
+    --category-color: #8b5cf6;
+    --category-color-dark: #7c3aed;
+    border-left: 4px solid var(--category-color);
+}
+
+.category-other {
+    --category-color: #6b7280;
+    --category-color-dark: #4b5563;
+    border-left: 4px solid var(--category-color);
+}
+
+.category-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    position: relative;
+    z-index: 1;
+}
+
+.category-checkbox {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border: 2px solid var(--category-color);
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.category-checkbox:checked {
+    background: var(--category-color);
+    border-color: var(--category-color);
+}
+
+.category-label {
+    cursor: pointer;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.category-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.category-icon {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--category-color);
+    color: white;
+    border-radius: 6px;
+    font-size: 10px;
+}
+
+.category-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.module-count {
+    background: var(--category-color);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+    min-width: 24px;
+    text-align: center;
+}
+
+.delete-category-btn {
+    padding: 8px;
+    background: #fee2e2;
+    color: #dc2626;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    z-index: 1;
+}
+
+.delete-category-btn:hover {
+    background: #fecaca;
+    transform: scale(1.1);
+}
+
+/* 模块列表样式 */
+.modules-list {
+    padding: 12px 12px 12px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 8px;
+    flex: 1;
+    overflow-y: auto;
+    max-height: 280px;
+}
+
+/* 模块列表滚动条样式 */
+.modules-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.modules-list::-webkit-scrollbar-track {
+    background: #f8fafc;
+    border-radius: 3px;
+}
+
+.modules-list::-webkit-scrollbar-thumb {
+    background: var(--category-color);
+    border-radius: 3px;
+    opacity: 0.6;
+}
+
+.modules-list::-webkit-scrollbar-thumb:hover {
+    opacity: 0.8;
+}
+
+.module-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 8px;
+    transition: all 0.2s ease;
+    position: relative;
+    min-height: 80px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between; /* 确保内容垂直分布均匀 */
+}
+
+.module-card:hover {
+    background: #f1f5f9;
+    border-color: var(--category-color);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.module-content {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    flex: 1;
+    min-height: 64px; /* 确保最小内容高度一致 */
+}
+
+.module-checkbox {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    border: 2px solid var(--category-color);
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-top: 2px;
+    flex-shrink: 0;
+}
+
+.module-checkbox:checked {
+    background: var(--category-color);
+    border-color: var(--category-color);
+}
+
+.module-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start; /* 内容顶部对齐 */
+    min-height: 100%; /* 确保信息区域填满可用空间 */
+}
+
+.module-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1f2937;
+    margin-bottom: 2px;
+    line-height: 1.2;
+}
+
+.module-file {
+    font-size: 12px;
+    color: #6b7280;
+    margin-bottom: 0px; /* 默认无间距 */
+    font-family: 'Monaco', 'Menlo', monospace;
+    line-height: 1.3;
+}
+
+/* 当有描述时，给文件名添加下边距 */
+.module-file.has-desc {
+    margin-bottom: 2px;
+}
+
+.module-desc {
+    font-size: 13px;
+    color: #374151;
+    line-height: 1.3;
+    display: -webkit-box;
+    font-family:'仿宋', 'Monaco', 'Menlo', monospace;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-top: 0; /* 确保描述与文件名紧密相连 */
+    margin-bottom: 0; /* 移除下边距，避免额外空白 */
+}
+
+/* 确保编辑按钮在所有情况下位置一致 */
+.edit-module-btn {
+    padding: 4px;
+    background: #ffffff;
+    color: var(--category-color);
+    border: 1px solid var(--category-color);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+    align-self: flex-start;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    margin-top: 2px; /* 与checkbox对齐 */
+}
+
+.edit-module-btn:hover {
+    background: var(--category-color);
+    color: white;
+    transform: scale(1.05);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+/* 对于没有checkbox的模块（other分类），确保module-info左侧对齐 */
+.module-content.no-checkbox .module-info {
+    margin-left: 0; /* 无checkbox时不需要额外的左边距 */
+}
+
+/* 对于有checkbox的模块，确保信息区域与checkbox正确对齐 */
+.module-content.has-checkbox .module-info {
+    margin-left: 0; /* 已通过gap处理间距 */
+}
+
+.empty-category {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 15px;
+    color: #9ca3af;
+    text-align: center;
+    min-height: 80px;
+}
+
+.empty-category i {
+    font-size: 24px;
+    margin-bottom: 6px;
+    opacity: 0.5;
+}
+
+.empty-category span {
+    font-size: 12px;
+}
+
+/* 响应式设计 */
+@media (max-width: 576px) {
+    .modules-grid {
+        grid-template-columns: 1fr;
+        max-height: 600px;
+        gap: 12px;
+    }
+    
+    .modules-list {
+        grid-template-columns: 1fr;
+        padding: 10px 10px 10px;
+        max-height: 260px;
+        gap: 6px;
+    }
+    
+    .category-header {
+        padding: 10px 12px;
+    }
+    
+    .category-name {
+        font-size: 14px;
+    }
+    
+    .module-card {
+        padding: 6px;
+        min-height: 70px;
+    }
+    
+    .module-category-section {
+        max-height: 360px;
+    }
+}
+
+@media (max-width: 768px) and (min-width: 577px) {
+    .modules-grid {
+        grid-template-columns: repeat(2, 1fr);
+        max-height: 650px;
+        gap: 12px;
+    }
+    
+    .modules-list {
+        padding: 11px 11px 11px;
+        max-height: 270px;
+        gap: 7px;
+    }
+    
+    .category-header {
+        padding: 11px 14px;
+    }
+    
+    .category-name {
+        font-size: 14px;
+    }
+    
+    .module-card {
+        padding: 7px;
+        min-height: 75px;
+    }
+    
+    .module-category-section {
+        max-height: 380px;
+    }
+}
+
+@media (max-width: 1200px) and (min-width: 769px) {
+    .modules-grid {
+        grid-template-columns: repeat(3, 1fr);
+        max-height: 700px;
+    }
+    
+    .module-category-section {
+        max-height: 400px;
+    }
+    
+    .modules-list {
+        max-height: 270px;
+    }
+}
 </style>
 {% endblock %}
 
@@ -230,81 +675,72 @@
                                 </div>
                             </div>
                         </div>
-                    </div>                    <!-- 按分类显示模块 -->
-                    <div class="row" id="modulesByCategory">
+                    </div>                    <!-- 按分类显示模块 - 新设计 -->
+                    <div class="modules-grid" id="modulesByCategory">
                         {% for category, info in module_items_by_category.items %}
-                        <div class="col-md-4 mb-3">
-                            <div class="card border-primary">
-                                <div class="card-header bg-primary text-white">
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <div class="d-flex align-items-center">
-                                            {% if category != 'other' %}
-                                                <input type="checkbox" class="form-check-input category-checkbox me-2" 
-                                                       id="category_{{ category }}" 
-                                                       data-category="{{ category }}"
-                                                       data-category-label="{{ info.label }}"
-                                                       style="margin-top: 0; vertical-align: middle;">
-                                                <label for="category_{{ category }}" class="form-check-label mb-0">
-                                            {% endif %}
-                                            <h6 class="mb-0">
-                                                <i class="fas fa-layer-group me-2"></i>{{ info.label }}
-                                                <span class="badge bg-light text-dark ms-2">{{ info.count }}</span>
-                                            </h6>
-                                            {% if category != 'other' %}
-                                                </label>
-                                            {% endif %}
-                                        </div>
-                                        {% if is_admin and category != 'other' %}
-                                            <div class="admin-controls">
-                                                <button class="btn btn-sm btn-outline-light delete-category-btn" 
-                                                        data-category="{{ category }}" 
-                                                        data-category-label="{{ info.label }}"
-                                                        title="删除分类">
-                                                    <i class="fas fa-trash"></i>
-                                                </button>
-                                            </div>
-                                        {% endif %}
+                        <div class="module-category-section" data-category="{{ category }}">
+                            <!-- 分类头部 -->
+                            <div class="category-header category-{{ category }}">
+                                <div class="category-title">
+                                    {% if category != 'other' %}
+                                        <input type="checkbox" class="category-checkbox" 
+                                               id="category_{{ category }}" 
+                                               data-category="{{ category }}"
+                                               data-category-label="{{ info.label }}">
+                                        <label for="category_{{ category }}" class="category-label">
+                                    {% endif %}
+                                    <div class="category-info">
+                                        <i class="category-icon fas fa-{% if category == 'attention' %}eye{% elif category == 'convolution' %}filter{% elif category == 'downsample' %}compress-arrows-alt{% elif category == 'fusion' %}code-merge{% elif category == 'head' %}brain{% elif category == 'block' %}cube{% else %}layer-group{% endif %}"></i>
+                                        <span class="category-name">{{ info.label }}</span>
+                                        <span class="module-count">{{ info.count }}</span>
                                     </div>
-                                </div>
-                                <div class="card-body p-2" style="max-height: 300px; overflow-y: auto;">
-                                    {% if info.modules %}
-                                        {% for module in info.modules %}
-                                        <div class="module-item p-2 border-bottom">
-                                            <div class="d-flex justify-content-between align-items-center">
-                                                <div class="d-flex align-items-center flex-grow-1">
-                                                    {% if category != 'other' %}
-                                                        <input type="checkbox" class="form-check-input module-checkbox me-2" 
-                                                               data-module-name="{{ module.name }}"
-                                                               data-module-category="{{ category }}"
-                                                               data-module-id="{{ module.id }}">
-                                                    {% endif %}
-                                                    <div>
-                                                        <strong>{{ module.name }}</strong>
-                                                        <br>
-                                                        <small class="text-muted">{{ module.module_file.name }}</small>
-                                                        {% if module.description %}
-                                                            <br>
-                                                            <small class="text-info">{{ module.description|truncatewords:8 }}</small>
-                                                        {% endif %}
-                                                    </div>
-                                                </div>
-                                                <div>
-                                                    <button class="btn btn-sm btn-outline-primary edit-module-btn" 
-                                                            data-file-path="{{ module.module_file.relative_path }}"
-                                                            title="编辑文件">
-                                                        <i class="fas fa-edit"></i>
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        {% endfor %}
-                                    {% else %}
-                                        <div class="text-center text-muted py-3">
-                                            <i class="fas fa-inbox"></i>
-                                            <p class="mb-0">暂无模块</p>
-                                        </div>
+                                    {% if category != 'other' %}
+                                        </label>
                                     {% endif %}
                                 </div>
+                                {% if is_admin and category != 'other' %}
+                                    <button class="delete-category-btn" 
+                                            data-category="{{ category }}" 
+                                            data-category-label="{{ info.label }}"
+                                            title="删除分类">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                {% endif %}
+                            </div>
+                            
+                            <!-- 模块列表 -->
+                            <div class="modules-list">
+                                {% if info.modules %}
+                                    {% for module in info.modules %}
+                                    <div class="module-card">
+                                        <div class="module-content{% if category != 'other' %} has-checkbox{% else %} no-checkbox{% endif %}">
+                                            {% if category != 'other' %}
+                                                <input type="checkbox" class="module-checkbox" 
+                                                       data-module-name="{{ module.name }}"
+                                                       data-module-category="{{ category }}"
+                                                       data-module-id="{{ module.id }}">
+                                            {% endif %}
+                                            <div class="module-info">
+                                                <div class="module-name">{{ module.name }}</div>
+                                                <div class="module-file{% if module.description %} has-desc{% endif %}">{{ module.module_file.name }}</div>
+                                                {% if module.description %}
+                                                    <div class="module-desc">{{ module.description|truncatewords:6 }}</div>
+                                                {% endif %}
+                                            </div>
+                                            <button class="edit-module-btn" 
+                                                    data-file-path="{{ module.module_file.relative_path }}"
+                                                    title="编辑文件">
+                                                <i class="fas fa-code"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                {% else %}
+                                    <div class="empty-category">
+                                        <i class="fas fa-inbox"></i>
+                                        <span>暂无模块</span>
+                                    </div>
+                                {% endif %}
                             </div>
                         </div>
                         {% endfor %}

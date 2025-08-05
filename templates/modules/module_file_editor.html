@@ -318,6 +318,53 @@
     font-size: 0.85rem;
     line-height: 1.2;
 }
+
+/* 模块分类弹窗优化样式 */
+#classifyModuleModal .modal-body {
+    padding: 1rem 1.5rem;
+}
+
+#classifyModuleModal .mb-3 {
+    margin-bottom: 0.75rem !important;
+}
+
+/* 优化模块描述输入框 */
+#classifyModuleDescription {
+    min-height: 60px; /* 设定最小高度 */
+    max-height: 120px; /* 设定最大高度 */
+    resize: vertical; /* 只允许垂直调整大小 */
+    font-size: 0.9rem;
+    line-height: 1.4;
+    padding: 0.5rem 0.75rem;
+    transition: height 0.2s ease, border-color 0.2s ease;
+}
+
+#classifyModuleDescription:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+/* 当描述为空时，减少高度 */
+#classifyModuleDescription:placeholder-shown {
+    min-height: 45px;
+}
+
+/* 模块分类弹窗整体紧凑化 */
+#classifyModuleModal .form-label {
+    margin-bottom: 0.3rem;
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+#classifyModuleModal .form-control,
+#classifyModuleModal .form-select {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.9rem;
+}
+
+#classifyModuleModal .modal-footer {
+    padding: 0.75rem 1.5rem;
+}
 </style>
 {% endblock %}
 
@@ -467,6 +514,7 @@
                                                             data-module-id="{{ module_item.id }}" 
                                                             data-module-name="{{ module_item.name }}"
                                                             data-current-category="{{ module_item.category }}"
+                                                            data-current-description="{{ module_item.description|default:'' }}"
                                                             title="重新分类">
                                                         <i class="fas fa-tags"></i>
                                                     </button>
@@ -524,6 +572,7 @@
                                                     data-module-id="{{ module_item.id }}" 
                                                     data-module-name="{{ module_item.name }}"
                                                     data-current-category="{{ module_item.category }}"
+                                                    data-current-description="{{ module_item.description|default:'' }}"
                                                     title="重新分类">
                                                 <i class="fas fa-edit"></i>
                                             </button>
@@ -651,7 +700,7 @@
                 </div>
                 <div class="mb-3">
                     <label class="form-label">模块描述（可选）</label>
-                    <textarea class="form-control" id="classifyModuleDescription" rows="3" 
+                    <textarea class="form-control" id="classifyModuleDescription" rows="2" 
                               placeholder="请简要描述这个模块的功能..."></textarea>
                 </div>
             </div>
@@ -1254,6 +1303,36 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentModuleForClassify = null;
     const classifyModal = new bootstrap.Modal(document.getElementById('classifyModuleModal'));
     
+    // 动态调整描述输入框高度的全局函数
+    window.adjustTextareaHeight = function() {
+        const textarea = document.getElementById('classifyModuleDescription');
+        if (!textarea) return;
+        
+        if (textarea.value.trim() === '') {
+            // 如果为空，使用最小高度
+            textarea.style.height = '45px';
+        } else {
+            // 如果有内容，自动调整高度
+            textarea.style.height = 'auto';
+            const scrollHeight = textarea.scrollHeight;
+            const minHeight = 45;
+            const maxHeight = 120;
+            const newHeight = Math.min(Math.max(scrollHeight, minHeight), maxHeight);
+            textarea.style.height = newHeight + 'px';
+        }
+    };
+    
+    // 为描述输入框绑定事件监听器
+    const classifyDescriptionTextarea = document.getElementById('classifyModuleDescription');
+    if (classifyDescriptionTextarea) {
+        classifyDescriptionTextarea.addEventListener('input', window.adjustTextareaHeight);
+        classifyDescriptionTextarea.addEventListener('focus', window.adjustTextareaHeight);
+        classifyDescriptionTextarea.addEventListener('blur', window.adjustTextareaHeight);
+        
+        // 初始调整
+        window.adjustTextareaHeight();
+    }
+    
     // 处理分类按钮点击
     document.addEventListener('click', function(e) {
         if (e.target.classList.contains('classify-btn') || 
@@ -1267,6 +1346,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const moduleId = btn.getAttribute('data-module-id');
             const moduleName = btn.getAttribute('data-module-name');
             const currentCategory = btn.getAttribute('data-current-category');
+            const currentDescription = btn.getAttribute('data-current-description') || '';
             
             currentModuleForClassify = {
                 id: moduleId,
@@ -1277,7 +1357,12 @@ document.addEventListener('DOMContentLoaded', function() {
             // 填充模态框
             document.getElementById('classifyModuleName').value = moduleName;
             document.getElementById('classifyModuleCategory').value = currentCategory || 'other';
-            document.getElementById('classifyModuleDescription').value = '';
+            document.getElementById('classifyModuleDescription').value = currentDescription;
+            
+            // 调整描述框高度
+            if (typeof window.adjustTextareaHeight === 'function') {
+                setTimeout(window.adjustTextareaHeight, 100);
+            }
             
             classifyModal.show();
         }
@@ -1299,6 +1384,11 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('classifyModuleName').value = moduleName;
             document.getElementById('classifyModuleCategory').value = 'other';
             document.getElementById('classifyModuleDescription').value = '';
+            
+            // 调整描述框高度
+            if (typeof window.adjustTextareaHeight === 'function') {
+                setTimeout(window.adjustTextareaHeight, 100);
+            }
             
             classifyModal.show();
         }
