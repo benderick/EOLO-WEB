@@ -1252,3 +1252,242 @@ def update_file_status_api(request):
             'success': False,
             'message': f'更新状态失败: {str(e)}'
         })
+
+
+# =============== 模板类管理API ===============
+
+@login_required
+def templates_list_api(request):
+    """
+    获取模板类列表API
+    """
+    try:
+        from .models import CodeTemplate
+        
+        templates = CodeTemplate.objects.all().order_by('-created_at')
+        templates_data = []
+        
+        for template in templates:
+            templates_data.append({
+                'id': template.id,
+                'name': template.name,
+                'description': template.description,
+                'code_content': template.code_content,
+                'usage_count': template.usage_count,
+                'created_at': template.created_at.isoformat(),
+                'created_by': template.created_by.username
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'templates': templates_data
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': f'获取模板列表失败: {str(e)}'
+        })
+
+
+@login_required
+@require_POST
+def create_template_api(request):
+    """
+    创建模板类API
+    """
+    try:
+        from .models import CodeTemplate
+        
+        data = json.loads(request.body)
+        name = data.get('name', '').strip()
+        description = data.get('description', '').strip()
+        code_content = data.get('code_content', '').strip()
+        
+        if not name or not code_content:
+            return JsonResponse({
+                'success': False,
+                'error': '模板名称和代码内容不能为空'
+            })
+        
+        # 检查名称是否已存在
+        if CodeTemplate.objects.filter(name=name).exists():
+            return JsonResponse({
+                'success': False,
+                'error': f'模板名称 "{name}" 已存在'
+            })
+        
+        # 创建模板
+        template = CodeTemplate.objects.create(
+            name=name,
+            description=description,
+            code_content=code_content,
+            created_by=request.user
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': '模板创建成功',
+            'template_id': template.id
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': '无效的JSON数据'
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': f'创建模板失败: {str(e)}'
+        })
+
+
+@login_required
+@require_POST
+def update_template_api(request):
+    """
+    更新模板类API
+    """
+    try:
+        from .models import CodeTemplate
+        
+        data = json.loads(request.body)
+        template_id = data.get('id')
+        name = data.get('name', '').strip()
+        description = data.get('description', '').strip()
+        code_content = data.get('code_content', '').strip()
+        
+        if not template_id or not name or not code_content:
+            return JsonResponse({
+                'success': False,
+                'error': '模板ID、名称和代码内容不能为空'
+            })
+        
+        try:
+            template = CodeTemplate.objects.get(id=template_id)
+        except CodeTemplate.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': '模板不存在'
+            })
+        
+        # 检查名称是否与其他模板冲突
+        if CodeTemplate.objects.filter(name=name).exclude(id=template_id).exists():
+            return JsonResponse({
+                'success': False,
+                'error': f'模板名称 "{name}" 已存在'
+            })
+        
+        # 更新模板
+        template.name = name
+        template.description = description
+        template.code_content = code_content
+        template.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': '模板更新成功'
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': '无效的JSON数据'
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': f'更新模板失败: {str(e)}'
+        })
+
+
+@login_required
+@require_POST
+def delete_template_api(request):
+    """
+    删除模板类API
+    """
+    try:
+        from .models import CodeTemplate
+        
+        data = json.loads(request.body)
+        template_id = data.get('id')
+        
+        if not template_id:
+            return JsonResponse({
+                'success': False,
+                'error': '模板ID不能为空'
+            })
+        
+        try:
+            template = CodeTemplate.objects.get(id=template_id)
+            template_name = template.name
+            template.delete()
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'模板 "{template_name}" 删除成功'
+            })
+            
+        except CodeTemplate.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': '模板不存在'
+            })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': '无效的JSON数据'
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': f'删除模板失败: {str(e)}'
+        })
+
+
+@login_required
+@require_POST
+def update_template_usage_api(request):
+    """
+    更新模板使用次数API
+    """
+    try:
+        from .models import CodeTemplate
+        
+        data = json.loads(request.body)
+        template_id = data.get('template_id')
+        
+        if not template_id:
+            return JsonResponse({
+                'success': False,
+                'error': '模板ID不能为空'
+            })
+        
+        try:
+            template = CodeTemplate.objects.get(id=template_id)
+            template.increment_usage()
+            
+            return JsonResponse({
+                'success': True,
+                'message': '使用次数更新成功'
+            })
+            
+        except CodeTemplate.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': '模板不存在'
+            })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': '无效的JSON数据'
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': f'更新使用次数失败: {str(e)}'
+        })

@@ -38,4 +38,11 @@ urlpatterns = [
     
     # 执行模型配置命令API
     path('api/execute-config/', views.execute_model_config_api, name='execute_config'),
+    
+    # 模板类管理API
+    path('api/templates/', views.templates_list_api, name='templates_list'),
+    path('api/templates/create/', views.create_template_api, name='create_template'),
+    path('api/templates/update/', views.update_template_api, name='update_template'),
+    path('api/templates/delete/', views.delete_template_api, name='delete_template'),
+    path('api/templates/usage/', views.update_template_usage_api, name='update_template_usage'),
 ]

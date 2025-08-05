@@ -245,3 +245,56 @@ class ModuleItem(models.Model):
     def file_path(self):
         """获取模块文件路径"""
         return self.module_file.relative_path
+
+
+class CodeTemplate(models.Model):
+    """
+    代码模板类
+    用于存储可重用的Python类代码片段
+    """
+    name = models.CharField(max_length=255, unique=True, verbose_name="模板名称")
+    description = models.TextField(blank=True, verbose_name="模板描述")
+    code_content = models.TextField(verbose_name="模板代码内容")
+    
+    # 元数据
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="创建者")
+    
+    # 使用统计
+    usage_count = models.PositiveIntegerField(default=0, verbose_name="使用次数")
+    
+    class Meta:
+        verbose_name = "代码模板"
+        verbose_name_plural = "代码模板"
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.name}"
+    
+    def increment_usage(self):
+        """增加使用次数"""
+        self.usage_count += 1
+        self.save(update_fields=['usage_count'])
+    
+    def get_placeholders(self):
+        """获取模板中的占位符（???）列表"""
+        import re
+        placeholders = re.findall(r'\?\?\?(\w*)', self.code_content)
+        return list(set(placeholders))  # 去重
+    
+    def apply_template(self, replacements):
+        """
+        应用模板，替换占位符
+        replacements: dict，key为占位符名称，value为替换值
+        """
+        result = self.code_content
+        
+        # 替换简单的???占位符
+        for placeholder, replacement in replacements.items():
+            if placeholder == 'default':
+                result = result.replace('???', replacement)
+            else:
+                result = result.replace(f'???{placeholder}', replacement)
+        
+        return result

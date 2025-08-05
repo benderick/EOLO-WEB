@@ -732,6 +732,65 @@
         max-height: 270px;
     }
 }
+
+/* 模板类卡片样式 */
+.template-card {
+    transition: all 0.2s ease;
+    border: 1px solid #e9ecef;
+}
+
+.template-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    border-color: #007bff;
+}
+
+.template-preview {
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    max-height: 120px;
+    overflow: hidden;
+    position: relative;
+}
+
+.template-preview pre {
+    margin: 0;
+    padding: 8px;
+    font-size: 11px;
+    line-height: 1.3;
+    color: #495057;
+}
+
+.template-preview::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 20px;
+    background: linear-gradient(transparent, #f8f9fa);
+    pointer-events: none;
+}
+
+/* 模板选择列表样式 */
+.template-item {
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.template-item:hover {
+    background-color: #f8f9fa !important;
+    border-color: #007bff !important;
+}
+
+.template-item.bg-primary {
+    background-color: #007bff !important;
+    border-color: #0056b3 !important;
+}
+
+.template-item.bg-primary:hover {
+    background-color: #0056b3 !important;
+}
 </style>
 {% endblock %}
 
@@ -1175,6 +1234,36 @@
     </div>
 </div>
 
+<!-- 模板类管理区域 -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0">
+                    <i class="fas fa-code me-2"></i>模板类管理
+                    <div class="float-end">
+                        <button id="addTemplateBtn" class="btn btn-sm btn-dark">
+                            <i class="fas fa-plus me-1"></i>添加模板类
+                        </button>
+                        <button id="refreshTemplatesBtn" class="btn btn-sm btn-outline-dark">
+                            <i class="fas fa-sync-alt"></i> 刷新
+                        </button>
+                    </div>
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row" id="templatesContainer">
+                    <div class="text-center text-muted py-4" id="noTemplatesMessage">
+                        <i class="fas fa-code fa-3x mb-3"></i>
+                        <p>暂无模板类</p>
+                        <p class="small">点击"添加模板类"按钮创建第一个模板</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- 上传进度模态框 -->
 <div class="modal fade" id="uploadModal" tabindex="-1">
     <div class="modal-dialog modal-sm">
@@ -1184,6 +1273,69 @@
                     <span class="visually-hidden">上传中...</span>
                 </div>
                 <p>正在上传文件...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 添加/编辑模板类模态框 -->
+<div class="modal fade" id="templateModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="templateModalTitle">
+                    <i class="fas fa-code me-2"></i>添加模板类
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="templateForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="templateName" class="form-label">模板名称 <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="templateName" required
+                                       placeholder="例如：BaseModule, AttentionLayer 等">
+                            </div>
+                            <div class="mb-3">
+                                <label for="templateDescription" class="form-label">模板描述</label>
+                                <textarea class="form-control" id="templateDescription" rows="3"
+                                          placeholder="简要描述这个模板类的功能和用途"></textarea>
+                            </div>
+                            <div class="alert alert-info">
+                                <h6><i class="fas fa-info-circle me-2"></i>占位符说明：</h6>
+                                <ul class="mb-0 small">
+                                    <li><code>???</code> - 通用占位符，用于类名等</li>
+                                    <li><code>???param</code> - 参数占位符</li>
+                                    <li><code>???method</code> - 方法名占位符</li>
+                                    <li>可自定义占位符名称</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="templateCode" class="form-label">Python代码 <span class="text-danger">*</span></label>
+                                <textarea class="form-control font-monospace" id="templateCode" rows="15" required
+                                          style="font-size: 14px;"
+                                          placeholder="class ???(nn.Module):
+    def __init__(self, ???param):
+        super().__init__()
+        # 在这里添加初始化代码
+        
+    def forward(self, x):
+        # 在这里添加前向传播代码
+        return x"></textarea>
+                            </div>
+                        </div>
+                    </div>
+                    <input type="hidden" id="templateId">
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" id="saveTemplateBtn" class="btn btn-primary">
+                    <i class="fas fa-save me-1"></i>保存模板
+                </button>
             </div>
         </div>
     </div>
@@ -2228,5 +2380,319 @@ document.getElementById('copyCommandBtn').addEventListener('click', function() {
         alert('复制失败，请手动选择复制');
     });
 });
+
+// =============== 模板类管理功能 ===============
+
+// 模板类管理
+let templates = [];
+let currentTemplateId = null;
+
+// 页面加载完成后获取模板列表
+document.addEventListener('DOMContentLoaded', function() {
+    loadTemplates();
+    
+    // 绑定模板类相关事件，添加安全检查
+    const addTemplateBtn = document.getElementById('addTemplateBtn');
+    const refreshTemplatesBtn = document.getElementById('refreshTemplatesBtn');
+    const saveTemplateBtn = document.getElementById('saveTemplateBtn');
+    
+    if (addTemplateBtn) {
+        addTemplateBtn.addEventListener('click', showAddTemplateModal);
+    } else {
+        console.warn('addTemplateBtn 元素未找到');
+    }
+    
+    if (refreshTemplatesBtn) {
+        refreshTemplatesBtn.addEventListener('click', loadTemplates);
+    } else {
+        console.warn('refreshTemplatesBtn 元素未找到');
+    }
+    
+    if (saveTemplateBtn) {
+        saveTemplateBtn.addEventListener('click', saveTemplate);
+    } else {
+        console.warn('saveTemplateBtn 元素未找到');
+    }
+});
+
+// 加载模板列表
+function loadTemplates() {
+    fetch('/modules/api/templates/')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                templates = data.templates;
+                renderTemplates();
+            } else {
+                console.error('加载模板失败:', data.error);
+                showAlert('加载模板失败: ' + data.error, 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('加载模板错误:', error);
+            showAlert('网络错误，无法加载模板', 'danger');
+        });
+}
+
+// 渲染模板列表
+function renderTemplates() {
+    const container = document.getElementById('templatesContainer');
+    const noTemplatesMessage = document.getElementById('noTemplatesMessage');
+    
+    // 安全检查，确保元素存在
+    if (!container) {
+        console.error('templatesContainer element not found');
+        return;
+    }
+    
+    if (templates.length === 0) {
+        container.innerHTML = '';
+        if (noTemplatesMessage) {
+            noTemplatesMessage.style.display = 'block';
+        }
+        return;
+    }
+    
+    if (noTemplatesMessage) {
+        noTemplatesMessage.style.display = 'none';
+    }
+    
+    let html = '';
+    templates.forEach(template => {
+        html += `
+            <div class="col-md-6 col-lg-4 mb-3">
+                <div class="card h-100 template-card">
+                    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0 text-primary">
+                            <i class="fas fa-code me-2"></i>${template.name}
+                        </h6>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-primary" onclick="editTemplate(${template.id})" title="编辑">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn btn-outline-danger" onclick="deleteTemplate(${template.id})" title="删除">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted small mb-2">${template.description || '无描述'}</p>
+                        <div class="template-preview">
+                            <pre class="small text-dark mb-0"><code>${escapeHtml(template.code_content.substring(0, 200))}${template.code_content.length > 200 ? '...' : ''}</code></pre>
+                        </div>
+                    </div>
+                    <div class="card-footer bg-transparent d-flex justify-content-between align-items-center">
+                        <small class="text-muted">
+                            <i class="fas fa-clock me-1"></i>${new Date(template.created_at).toLocaleDateString()}
+                        </small>
+                        <small class="text-muted">
+                            <i class="fas fa-user me-1"></i>使用 ${template.usage_count} 次
+                        </small>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+// 显示添加模板模态框
+function showAddTemplateModal() {
+    // 安全检查，确保所需元素存在
+    const titleElement = document.getElementById('templateModalTitle');
+    const formElement = document.getElementById('templateForm');
+    const idElement = document.getElementById('templateId');
+    const modalElement = document.getElementById('templateModal');
+    
+    if (!titleElement || !formElement || !idElement || !modalElement) {
+        console.error('模板模态框元素缺失');
+        showAlert('页面元素加载异常，请刷新页面重试', 'danger');
+        return;
+    }
+    
+    currentTemplateId = null;
+    titleElement.innerHTML = '<i class="fas fa-code me-2"></i>添加模板类';
+    formElement.reset();
+    idElement.value = '';
+    
+    const modal = new bootstrap.Modal(modalElement);
+    modal.show();
+}
+
+// 编辑模板
+function editTemplate(templateId) {
+    const template = templates.find(t => t.id === templateId);
+    if (!template) return;
+    
+    // 安全检查，确保所需元素存在
+    const titleElement = document.getElementById('templateModalTitle');
+    const nameElement = document.getElementById('templateName');
+    const descElement = document.getElementById('templateDescription');
+    const codeElement = document.getElementById('templateCode');
+    const idElement = document.getElementById('templateId');
+    const modalElement = document.getElementById('templateModal');
+    
+    if (!titleElement || !nameElement || !descElement || !codeElement || !idElement || !modalElement) {
+        console.error('模板编辑模态框元素缺失');
+        showAlert('页面元素加载异常，请刷新页面重试', 'danger');
+        return;
+    }
+    
+    currentTemplateId = templateId;
+    titleElement.innerHTML = '<i class="fas fa-edit me-2"></i>编辑模板类';
+    nameElement.value = template.name;
+    descElement.value = template.description || '';
+    codeElement.value = template.code_content;
+    idElement.value = templateId;
+    
+    const modal = new bootstrap.Modal(modalElement);
+    modal.show();
+}
+
+// 保存模板
+function saveTemplate() {
+    // 安全检查，确保所需元素存在
+    const nameElement = document.getElementById('templateName');
+    const descElement = document.getElementById('templateDescription');
+    const codeElement = document.getElementById('templateCode');
+    const idElement = document.getElementById('templateId');
+    const saveBtnElement = document.getElementById('saveTemplateBtn');
+    
+    if (!nameElement || !descElement || !codeElement || !idElement || !saveBtnElement) {
+        console.error('模板保存表单元素缺失');
+        showAlert('页面元素加载异常，请刷新页面重试', 'danger');
+        return;
+    }
+    
+    const name = nameElement.value.trim();
+    const description = descElement.value.trim();
+    const codeContent = codeElement.value.trim();
+    const templateId = idElement.value;
+    
+    if (!name || !codeContent) {
+        showAlert('请填写模板名称和代码内容', 'warning');
+        return;
+    }
+    
+    const originalText = saveBtnElement.innerHTML;
+    saveBtnElement.disabled = true;
+    saveBtnElement.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>保存中...';
+    
+    const url = templateId ? `/modules/api/templates/update/` : `/modules/api/templates/create/`;
+    const method = 'POST';
+    const data = {
+        name: name,
+        description: description,
+        code_content: codeContent
+    };
+    
+    if (templateId) {
+        data.id = templateId;
+    }
+    
+    fetch(url, {
+        method: method,
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert(templateId ? '模板更新成功' : '模板创建成功', 'success');
+            bootstrap.Modal.getInstance(document.getElementById('templateModal')).hide();
+            loadTemplates();
+        } else {
+            showAlert('保存失败: ' + data.error, 'danger');
+        }
+    })
+    .catch(error => {
+        console.error('保存模板错误:', error);
+        showAlert('网络错误，保存失败', 'danger');
+    })
+    .finally(() => {
+        saveBtnElement.disabled = false;
+        saveBtnElement.innerHTML = originalText;
+    });
+}
+
+// 删除模板
+function deleteTemplate(templateId) {
+    const template = templates.find(t => t.id === templateId);
+    if (!template) return;
+    
+    if (!confirm(`确定要删除模板"${template.name}"吗？此操作不可恢复。`)) {
+        return;
+    }
+    
+    fetch(`/modules/api/templates/delete/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({ id: templateId })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('模板删除成功', 'success');
+            loadTemplates();
+        } else {
+            showAlert('删除失败: ' + data.error, 'danger');
+        }
+    })
+    .catch(error => {
+        console.error('删除模板错误:', error);
+        showAlert('网络错误，删除失败', 'danger');
+    });
+}
+
+// 辅助函数
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+function showAlert(message, type = 'info') {
+    // 创建一个临时的alert元素
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    alertDiv.style.top = '20px';
+    alertDiv.style.right = '20px';
+    alertDiv.style.zIndex = '9999';
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(alertDiv);
+    
+    // 3秒后自动移除
+    setTimeout(() => {
+        if (alertDiv.parentElement) {
+            alertDiv.remove();
+        }
+    }, 3000);
+}
 </script>
 {% endblock %}

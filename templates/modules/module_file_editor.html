@@ -365,6 +365,60 @@
 #classifyModuleModal .modal-footer {
     padding: 0.75rem 1.5rem;
 }
+
+/* 类列表样式 */
+.class-item-card {
+    background: #f8f9fa;
+    transition: all 0.2s ease;
+}
+
+.class-item-card:hover {
+    background: #e9ecef;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.class-name {
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #495057;
+}
+
+.class-action-btn {
+    min-width: 32px;
+    height: 32px;
+    padding: 0;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    border: none;
+}
+
+.class-action-btn:hover {
+    transform: scale(1.1);
+}
+
+.class-action-btn.add-btn {
+    background-color: #28a745;
+    color: white;
+}
+
+.class-action-btn.remove-btn {
+    background-color: #dc3545;
+    color: white;
+}
+
+.class-action-btn:disabled {
+    background-color: #6c757d !important;
+    color: #adb5bd !important;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.class-in-all {
+    background-color: #d1ecf1;
+    border-color: #bee5eb;
+}
 </style>
 {% endblock %}
 
@@ -434,6 +488,9 @@
                         </div>
                         <div class="col-md-6 text-end">
                             <div class="btn-group btn-group-sm" role="group">
+                                <button type="button" class="btn btn-outline-primary" id="loadTemplateBtn">
+                                    <i class="fas fa-code me-1"></i>载入模板类
+                                </button>
                                 <button type="button" class="btn btn-outline-success" id="testBtn" onclick="testPythonFile()">
                                     <i class="fas fa-play me-1"></i>测试运行
                                 </button>
@@ -586,6 +643,29 @@
                     {% endif %}
                 </div>
             </div>
+            
+            <!-- 类列表区域 -->
+            <div class="card module-info-sidebar mt-3">
+                <div class="card-header bg-success text-white">
+                    <h6 class="mb-0">
+                        <i class="fas fa-cube me-2"></i>类列表
+                        <span id="classCountBadge" class="badge bg-light text-dark float-end">0</span>
+                    </h6>
+                </div>
+                <div class="card-body p-2">
+                    <div id="classListContainer">
+                        <div class="text-center text-muted py-3" id="noClassesMessage">
+                            <i class="fas fa-search fa-2x mb-2"></i>
+                            <p class="mb-0 small">正在分析类定义...</p>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <button class="btn btn-sm btn-outline-success w-100" onclick="analyzeAndUpdateClasses()">
+                            <i class="fas fa-sync-alt me-1"></i>刷新类列表
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -711,6 +791,55 @@
         </div>
     </div>
 </div>
+
+<!-- 载入模板类对话框 -->
+<div class="modal fade" id="loadTemplateModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-code me-2"></i>载入模板类
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>选择模板类</h6>
+                        <div id="templatesList" class="border rounded p-3" style="max-height: 300px; overflow-y: auto;">
+                            <div class="text-center text-muted">
+                                <i class="fas fa-spinner fa-spin"></i> 加载中...
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>模板预览</h6>
+                        <div id="templatePreview" class="border rounded p-3 bg-light" style="max-height: 300px; overflow-y: auto;">
+                            <div class="text-muted">请选择一个模板查看预览</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row mt-3" id="placeholderSection" style="display: none;">
+                    <div class="col-12">
+                        <h6>填写占位符</h6>
+                        <div class="alert alert-info">
+                            <small><i class="fas fa-info-circle me-1"></i>请为模板中的占位符（???）填写具体的值</small>
+                        </div>
+                        <div id="placeholderInputs">
+                            <!-- 动态生成的占位符输入框 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="insertTemplateBtn" disabled>
+                    <i class="fas fa-plus me-1"></i>插入到代码
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 
@@ -732,10 +861,26 @@
 <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.0/addon/dialog/dialog.min.js"></script> -->
 
 <script>
+// 全局变量定义
+let isEditMode = {{ is_editing|yesno:"true,false" }};
+let isModified = false;
+let originalContent = '';
+let editorInstance = null; // 存储CodeMirror实例
+
+// 显示保存状态 - 全局函数
+function showSaveStatus(message, type) {
+    const statusDiv = document.getElementById('saveStatus');
+    const statusText = document.getElementById('saveStatusText');
+    
+    statusText.textContent = message;
+    statusDiv.className = `save-status ${type} show`;
+    
+    setTimeout(() => {
+        statusDiv.classList.remove('show');
+    }, 3000);
+}
+
 document.addEventListener('DOMContentLoaded', function() {
-    let isEditMode = {{ is_editing|yesno:"true,false" }};
-    let isModified = false;
-    let originalContent = '';
     
     // 获取DOM元素
     const textarea = document.getElementById('codeEditor');
@@ -773,11 +918,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             },
             hintOptions: {
-            hint: CodeMirror.hint.python
-        }
-    });
-    
-    originalContent = editor.getValue();
+                hint: CodeMirror.hint.python
+            }
+        });
+        
+        // 存储编辑器实例到全局变量
+        editorInstance = editor;
+        
+        originalContent = editor.getValue();
     
     // 立即隐藏加载遮罩，CodeMirror渲染很快
     setTimeout(function() {
@@ -864,6 +1012,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 // 确保深色主题
                 editor.refresh();
                 
+                // 进入编辑模式时分析一次类列表
+                setTimeout(() => {
+                    analyzeAndUpdateClasses();
+                }, 200);
+                
                 showSaveStatus('已进入编辑模式，可以修改文件内容', 'success');
             } else {
                 // 处理编辑冲突或其他错误
@@ -946,6 +1099,11 @@ document.addEventListener('DOMContentLoaded', function() {
             editor.refresh();
         }, 100);
         
+        // 退出编辑模式时分析一次类列表
+        setTimeout(() => {
+            analyzeAndUpdateClasses();
+        }, 200);
+        
         showSaveStatus('已退出编辑模式', 'success');
     }
     
@@ -954,6 +1112,8 @@ document.addEventListener('DOMContentLoaded', function() {
         if (change.origin !== 'setValue' && isEditMode) {
             isModified = (cm.getValue() !== originalContent);
             updateSaveButton();
+            
+            // 不再实时分析类列表变化，只在保存时和加载时分析
         }
     });
     
@@ -1008,8 +1168,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 showSaveStatus('保存成功，已退出编辑模式', 'success');
                 // 保存成功后自动退出编辑模式
                 exitEditMode();
-                // 重新分析模块信息并更新侧边栏
-                refreshModuleInfo();
+                // 不刷新页面，直接重新分析模块信息并更新侧边栏和类列表
+                refreshModuleInfoWithoutReload();
             } else {
                 showSaveStatus('保存失败: ' + data.error, 'error');
             }
@@ -1024,19 +1184,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // 显示保存状态
-    function showSaveStatus(message, type) {
-        const statusDiv = document.getElementById('saveStatus');
-        const statusText = document.getElementById('saveStatusText');
-        
-        statusText.textContent = message;
-        statusDiv.className = `save-status ${type} show`;
-        
-        setTimeout(() => {
-            statusDiv.classList.remove('show');
-        }, 3000);
-    }
-    
     // 工具栏按钮事件
     editBtn.addEventListener('click', function() {
         const canEdit = {{ can_edit|yesno:"true,false" }};
@@ -1049,7 +1196,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     saveBtn.addEventListener('click', saveFile);
     
-    // 刷新模块信息
+    // 刷新模块信息（带页面重载）
     function refreshModuleInfo() {
         const filePath = '{{ file_path }}';
         if (!filePath) return;
@@ -1101,6 +1248,145 @@ document.addEventListener('DOMContentLoaded', function() {
             showSaveStatus('同步模块信息失败: 网络错误', 'error');
             console.error('分析文件错误:', error);
         });
+    }
+    
+    // 刷新模块信息（不重载页面）
+    function refreshModuleInfoWithoutReload() {
+        const filePath = '{{ file_path }}';
+        if (!filePath) return;
+        
+        // 显示同步状态
+        showSaveStatus('正在同步模块信息...', 'info');
+        
+        // 重新分析文件的__all__字段
+        fetch('/modules/api/analyze-file/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                file_path: filePath
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // 显示同步结果
+                if (data.total_changes > 0) {
+                    let changeDetails = [];
+                    if (data.added_modules && data.added_modules.length > 0) {
+                        changeDetails.push(`新增${data.added_modules.length}个模块`);
+                    }
+                    if (data.updated_modules && data.updated_modules.length > 0) {
+                        changeDetails.push(`更新${data.updated_modules.length}个模块`);
+                    }
+                    if (data.deleted_modules && data.deleted_modules.length > 0) {
+                        changeDetails.push(`删除${data.deleted_modules.length}个模块`);
+                    }
+                    showSaveStatus(`模块同步完成: ${changeDetails.join('，')}`, 'success');
+                } else {
+                    showSaveStatus('模块信息无变化', 'success');
+                }
+                
+                // 更新模块信息侧边栏显示
+                updateModuleInfoSidebar(data);
+                
+                // 重新分析类列表（使用保存后的内容）
+                setTimeout(() => {
+                    analyzeAndUpdateClasses();
+                }, 500);
+            } else {
+                showSaveStatus('同步模块信息失败: ' + data.error, 'error');
+                console.error('分析文件失败:', data.error);
+            }
+        })
+        .catch(error => {
+            showSaveStatus('同步模块信息失败: 网络错误', 'error');
+            console.error('分析文件错误:', error);
+        });
+    }
+    
+    // 更新模块信息侧边栏显示
+    function updateModuleInfoSidebar(data) {
+        // 更新__all__字段模块显示
+        const moduleInfoCard = document.querySelector('.module-info-sidebar .card-body');
+        if (!moduleInfoCard) return;
+        
+        // 从当前编辑器内容中提取__all__项目
+        const code = editorInstance ? editorInstance.getValue() : '';
+        const allPattern = /__all__\s*=\s*\[(.*?)\]/s;
+        const allMatch = allPattern.exec(code);
+        const allItems = [];
+        
+        if (allMatch) {
+            const itemPattern = /["']([^"']+)["']/g;
+            let itemMatch;
+            while ((itemMatch = itemPattern.exec(allMatch[1])) !== null) {
+                allItems.push(itemMatch[1]);
+            }
+        }
+        
+        // 更新模块信息头部的徽章
+        const badge = document.querySelector('.module-info-sidebar .card-header .badge');
+        if (badge) {
+            badge.textContent = allItems.length;
+        }
+        
+        // 重新构建模块信息显示
+        let newContent = '';
+        
+        if (allItems.length > 0) {
+            newContent += `
+                <div class="mb-3">
+                    <h6 class="text-muted mb-2">
+                        <i class="fas fa-list me-1"></i>__all__ 字段模块
+                    </h6>
+                    <div class="module-items-list">
+            `;
+            
+            allItems.forEach(item => {
+                newContent += `
+                    <div class="module-item-card mb-2 p-2 border rounded">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="flex-grow-1">
+                                <div class="module-name text-primary fw-bold">${item}</div>
+                                <small class="text-muted">已导出模块</small>
+                            </div>
+                            <div class="module-actions">
+                                <button class="btn btn-sm btn-outline-primary add-module-btn" 
+                                        data-module-name="${item}" 
+                                        title="分类此模块">
+                                    <i class="fas fa-tag"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            newContent += `
+                    </div>
+                </div>
+            `;
+        } else {
+            newContent += `
+                <div class="text-center text-muted py-3">
+                    <i class="fas fa-info-circle fa-2x mb-2"></i>
+                    <p class="mb-0 small">此文件没有 __all__ 字段</p>
+                    <small>无法检测到可导出的模块</small>
+                </div>
+            `;
+        }
+        
+        // 保留已分类模块的显示（这部分来自Django模板，暂时保持不变）
+        const existingClassifiedModules = moduleInfoCard.querySelector('.mt-3');
+        if (existingClassifiedModules) {
+            newContent += existingClassifiedModules.outerHTML;
+        }
+        
+        // 更新内容
+        moduleInfoCard.innerHTML = newContent;
     }
     
     cancelBtn.addEventListener('click', function() {
@@ -1485,7 +1771,558 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     }, 50); // 将初始化延迟从150ms减少到50ms，加快编辑器加载速度
+    
+    // 页面加载完成后分析一次类定义并更新模块信息
+    setTimeout(() => {
+        analyzeAndUpdateClasses();
+        // 同时初始化模块信息显示
+        updateModuleInfoSidebar({success: true});
+    }, 1000);
 });
+
+// 类分析和管理功能
+let currentClasses = [];
+let allItems = [];
+
+// 分析并更新类列表
+function analyzeAndUpdateClasses() {
+    // 检查编辑器是否存在
+    if (!editorInstance) {
+        return;
+    }
+    
+    // 获取代码内容 - 使用CodeMirror的getValue方法
+    const code = editorInstance.getValue();
+    
+    // 分析类定义
+    const classPattern = /^class\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\([^)]*\))?:/gm;
+    const classes = [];
+    let match;
+    
+    while ((match = classPattern.exec(code)) !== null) {
+        classes.push(match[1]);
+    }
+    
+    // 分析__all__内容
+    const allPattern = /__all__\s*=\s*\[(.*?)\]/s;
+    const allMatch = allPattern.exec(code);
+    const allList = [];
+    
+    if (allMatch) {
+        const itemPattern = /["']([^"']+)["']/g;
+        let itemMatch;
+        while ((itemMatch = itemPattern.exec(allMatch[1])) !== null) {
+            allList.push(itemMatch[1]);
+        }
+    }
+    
+    currentClasses = classes;
+    allItems = allList;
+    updateClassListDisplay();
+}
+
+// 更新类列表显示
+function updateClassListDisplay() {
+    const container = document.getElementById('classListContainer');
+    const badge = document.getElementById('classCountBadge');
+    
+    if (!container || !badge) {
+        return;
+    }
+    
+    badge.textContent = currentClasses.length;
+    
+    if (currentClasses.length === 0) {
+        container.innerHTML = `
+            <div class="text-center text-muted py-3" id="noClassesMessage">
+                <i class="fas fa-info-circle fa-2x mb-2"></i>
+                <p class="mb-0 small">此文件中没有定义类</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '';
+    currentClasses.forEach(className => {
+        const isInAll = allItems.includes(className);
+        const cardClass = isInAll ? 'class-item-card mb-2 p-2 border rounded class-in-all' : 'class-item-card mb-2 p-2 border rounded';
+        const buttonClass = isInAll ? 'class-action-btn remove-btn' : 'class-action-btn add-btn';
+        const buttonIcon = isInAll ? 'fas fa-minus' : 'fas fa-plus';
+        const buttonTitle = isInAll ? '从__all__中删除' : '添加到__all__';
+        const buttonAction = isInAll ? `removeFromAll('${className}')` : `addToAll('${className}')`;
+        
+        html += `
+            <div class="${cardClass}">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="flex-grow-1">
+                        <div class="class-name" title="${className}">
+                            <i class="fas fa-cube text-primary me-1"></i>
+                            <strong>${className}</strong>
+                            ${isInAll ? '<small class="text-success ms-2">(已在__all__中)</small>' : ''}
+                        </div>
+                    </div>
+                    <div class="class-actions">
+                        <button class="${buttonClass}" 
+                                onclick="${buttonAction}"
+                                title="${buttonTitle}"
+                                ${!isEditMode ? 'disabled' : ''}>
+                            <i class="${buttonIcon}"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+// 添加类到__all__
+function addToAll(className) {
+    // 检查是否在编辑模式
+    if (!isEditMode) {
+        showSaveStatus('请先进入编辑模式才能修改__all__字段', 'error');
+        return;
+    }
+    
+    if (!editorInstance) {
+        showSaveStatus('编辑器未初始化', 'error');
+        return;
+    }
+    
+    // 获取代码内容 - 使用CodeMirror的getValue方法
+    const code = editorInstance.getValue();
+    const allPattern = /__all__\s*=\s*\[(.*?)\]/s;
+    const match = allPattern.exec(code);
+    
+    if (match) {
+        // 已存在__all__字段
+        const currentItems = match[1];
+        let newItems;
+        
+        if (currentItems.trim() === '') {
+            newItems = `"${className}"`;
+        } else {
+            newItems = currentItems.trim();
+            if (newItems.endsWith(',')) {
+                newItems += ` "${className}"`;
+            } else {
+                newItems += `, "${className}"`;
+            }
+        }
+        
+        const newCode = code.replace(allPattern, `__all__ = [${newItems}]`);
+        editorInstance.setValue(newCode); // 使用CodeMirror的setValue方法
+        
+    } else {
+        // 不存在__all__字段，在文件开头添加
+        const lines = code.split('\n');
+        let insertIndex = 0;
+        
+        // 跳过文档字符串和导入语句
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (line.startsWith('"""') || line.startsWith("'''") || 
+                line.startsWith('import ') || line.startsWith('from ') ||
+                line.startsWith('#') || line === '') {
+                insertIndex = i + 1;
+            } else {
+                break;
+            }
+        }
+        
+        const allLine = `__all__ = ["${className}"]`;
+        lines.splice(insertIndex, 0, '', allLine);
+        
+        const newCode = lines.join('\n');
+        editorInstance.setValue(newCode); // 使用CodeMirror的setValue方法
+    }
+    
+    showSaveStatus(`已将类 "${className}" 添加到__all__字段`, 'success');
+    
+    // 重新分析并更新显示
+    setTimeout(analyzeAndUpdateClasses, 100);
+}
+
+// 从__all__中删除类
+function removeFromAll(className) {
+    // 检查是否在编辑模式
+    if (!isEditMode) {
+        showSaveStatus('请先进入编辑模式才能修改__all__字段', 'error');
+        return;
+    }
+    
+    if (!editorInstance) {
+        showSaveStatus('编辑器未初始化', 'error');
+        return;
+    }
+    
+    // 获取代码内容 - 使用CodeMirror的getValue方法
+    const code = editorInstance.getValue();
+    const allPattern = /__all__\s*=\s*\[(.*?)\]/s;
+    const match = allPattern.exec(code);
+    
+    if (!match) {
+        showSaveStatus('未找到__all__字段', 'error');
+        return;
+    }
+    
+    const currentItems = match[1];
+    const itemPattern = /["']([^"']+)["']/g;
+    const items = [];
+    let itemMatch;
+    
+    while ((itemMatch = itemPattern.exec(currentItems)) !== null) {
+        if (itemMatch[1] !== className) {
+            items.push(`"${itemMatch[1]}"`);
+        }
+    }
+    
+    const newItems = items.join(', ');
+    const newCode = code.replace(allPattern, `__all__ = [${newItems}]`);
+    editorInstance.setValue(newCode); // 使用CodeMirror的setValue方法
+    
+    showSaveStatus(`已从__all__字段中删除类 "${className}"`, 'success');
+    
+    // 重新分析并更新显示
+    setTimeout(analyzeAndUpdateClasses, 100);
+}
+
+// =============== 模板类载入功能 ===============
+
+// 模板类相关变量
+let availableTemplates = [];
+let selectedTemplate = null;
+
+// 载入模板类按钮点击事件
+document.getElementById('loadTemplateBtn').addEventListener('click', function() {
+    if (!isEditMode) {
+        showSaveStatus('请先进入编辑模式才能载入模板类', 'error');
+        return;
+    }
+    
+    loadAvailableTemplates();
+    const modal = new bootstrap.Modal(document.getElementById('loadTemplateModal'));
+    modal.show();
+});
+
+// 加载可用模板列表
+function loadAvailableTemplates() {
+    const templatesList = document.getElementById('templatesList');
+    templatesList.innerHTML = '<div class="text-center text-muted"><i class="fas fa-spinner fa-spin"></i> 加载中...</div>';
+    
+    fetch('/modules/api/templates/')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                availableTemplates = data.templates;
+                renderTemplatesList();
+            } else {
+                templatesList.innerHTML = '<div class="text-center text-muted">加载模板失败: ' + data.error + '</div>';
+            }
+        })
+        .catch(error => {
+            console.error('加载模板错误:', error);
+            templatesList.innerHTML = '<div class="text-center text-muted">网络错误，无法加载模板</div>';
+        });
+}
+
+// 渲染模板列表
+function renderTemplatesList() {
+    const templatesList = document.getElementById('templatesList');
+    
+    if (availableTemplates.length === 0) {
+        templatesList.innerHTML = `
+            <div class="text-center text-muted">
+                <i class="fas fa-exclamation-circle fa-2x mb-2"></i>
+                <p>暂无可用模板</p>
+                <p class="small">请先在模块管理页面添加模板类</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '';
+    availableTemplates.forEach(template => {
+        html += `
+            <div class="template-item p-2 mb-2 border rounded cursor-pointer" 
+                 data-template-id="${template.id}" 
+                 onclick="selectTemplate(${template.id})">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="mb-1 text-primary">${escapeHtml(template.name)}</h6>
+                        <small class="text-muted">${escapeHtml(template.description || '无描述')}</small>
+                    </div>
+                    <div class="text-end">
+                        <small class="text-muted">使用 ${template.usage_count} 次</small>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    templatesList.innerHTML = html;
+}
+
+// 选择模板
+function selectTemplate(templateId) {
+    // 移除之前的选中状态
+    document.querySelectorAll('.template-item').forEach(item => {
+        item.classList.remove('bg-primary', 'text-white');
+    });
+    
+    // 添加选中状态
+    const selectedItem = document.querySelector(`[data-template-id="${templateId}"]`);
+    if (selectedItem) {
+        selectedItem.classList.add('bg-primary', 'text-white');
+    }
+    
+    // 获取选中的模板
+    selectedTemplate = availableTemplates.find(t => t.id === templateId);
+    if (!selectedTemplate) return;
+    
+    // 显示模板预览
+    showTemplatePreview(selectedTemplate);
+    
+    // 生成占位符输入框
+    generatePlaceholderInputs(selectedTemplate);
+    
+    // 启用插入按钮
+    document.getElementById('insertTemplateBtn').disabled = false;
+}
+
+// 显示模板预览
+function showTemplatePreview(template) {
+    const preview = document.getElementById('templatePreview');
+    preview.innerHTML = `
+        <h6 class="text-primary mb-2">${escapeHtml(template.name)}</h6>
+        <p class="text-muted small mb-3">${escapeHtml(template.description || '无描述')}</p>
+        <pre class="text-dark small mb-0"><code>${escapeHtml(template.code_content)}</code></pre>
+    `;
+}
+
+// 生成占位符输入框
+function generatePlaceholderInputs(template) {
+    const placeholderSection = document.getElementById('placeholderSection');
+    const placeholderInputs = document.getElementById('placeholderInputs');
+    
+    // 分析占位符
+    const placeholders = extractPlaceholders(template.code_content);
+    
+    if (placeholders.length === 0) {
+        placeholderSection.style.display = 'none';
+        return;
+    }
+    
+    placeholderSection.style.display = 'block';
+    
+    // 获取当前文件中的类名列表作为建议
+    const existingClasses = currentClasses || [];
+    
+    let html = '';
+    placeholders.forEach((placeholder, index) => {
+        const placeholderName = placeholder || 'default';
+        const placeholderLabel = placeholderName === 'default' ? '类名/默认值' : placeholderName;
+        
+        html += `
+            <div class="mb-3">
+                <label class="form-label">
+                    ${placeholderLabel} <span class="text-danger">*</span>
+                    <small class="text-muted">(替换占位符: ???${placeholder})</small>
+                </label>
+                <div class="input-group">
+                    <input type="text" class="form-control" id="placeholder_${index}" 
+                           placeholder="请输入${placeholderLabel}" required>
+                    ${existingClasses.length > 0 ? `
+                    <button class="btn btn-outline-secondary dropdown-toggle" type="button" 
+                            data-bs-toggle="dropdown">选择现有类</button>
+                    <ul class="dropdown-menu">
+                        ${existingClasses.map(className => 
+                            `<li><a class="dropdown-item" onclick="fillPlaceholder(${index}, '${className}')">${className}</a></li>`
+                        ).join('')}
+                    </ul>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    });
+    
+    placeholderInputs.innerHTML = html;
+}
+
+// 提取占位符
+function extractPlaceholders(codeContent) {
+    const matches = [...codeContent.matchAll(/\?\?\?(\w*)/g)];
+    const placeholders = [];
+    const seen = new Set();
+    
+    matches.forEach(match => {
+        const placeholder = match[1] || '';
+        if (!seen.has(placeholder)) {
+            placeholders.push(placeholder);
+            seen.add(placeholder);
+        }
+    });
+    
+    return placeholders;
+}
+
+// 填充占位符输入框
+function fillPlaceholder(index, value) {
+    const input = document.getElementById(`placeholder_${index}`);
+    if (input) {
+        input.value = value;
+    }
+}
+
+// 插入模板到代码
+document.getElementById('insertTemplateBtn').addEventListener('click', function() {
+    if (!selectedTemplate || !editorInstance) return;
+    
+    // 收集占位符替换值
+    const placeholders = extractPlaceholders(selectedTemplate.code_content);
+    const replacements = {};
+    let hasError = false;
+    
+    placeholders.forEach((placeholder, index) => {
+        const input = document.getElementById(`placeholder_${index}`);
+        if (input) {
+            const value = input.value.trim();
+            if (!value) {
+                showSaveStatus(`请填写${placeholder || '默认'}占位符`, 'error');
+                hasError = true;
+                return;
+            }
+            
+            if (placeholder === '') {
+                replacements['default'] = value;
+            } else {
+                replacements[placeholder] = value;
+            }
+        }
+    });
+    
+    if (hasError) return;
+    
+    // 应用模板
+    let processedCode = selectedTemplate.code_content;
+    
+    // 替换占位符
+    for (const [key, value] of Object.entries(replacements)) {
+        if (key === 'default') {
+            processedCode = processedCode.replace(/\?\?\?(?!\w)/g, value);
+        } else {
+            processedCode = processedCode.replace(new RegExp(`\\?\\?\\?${key}`, 'g'), value);
+        }
+    }
+    
+    // 找到合适的插入位置（在其他类定义的后面，但在if __name__之前）
+    const currentCode = editorInstance.getValue();
+    const insertPosition = findClassInsertPosition(currentCode);
+    
+    // 插入代码
+    const cursor = editorInstance.getCursor();
+    const line = insertPosition.line;
+    const beforeText = insertPosition.line > 0 ? '\n\n' : '';
+    const afterText = '\n';
+    
+    editorInstance.setCursor(line, 0);
+    editorInstance.replaceSelection(beforeText + processedCode + afterText);
+    
+    // 更新模板使用次数
+    updateTemplateUsage(selectedTemplate.id);
+    
+    // 关闭模态框
+    bootstrap.Modal.getInstance(document.getElementById('loadTemplateModal')).hide();
+    
+    // 重新分析类列表
+    setTimeout(analyzeAndUpdateClasses, 500);
+    
+    showSaveStatus(`成功插入模板类 "${selectedTemplate.name}"`, 'success');
+});
+
+// 找到合适的类插入位置
+function findClassInsertPosition(code) {
+    const lines = code.split('\n');
+    let lastClassLine = -1;
+    let mainBlockLine = -1;
+    
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        
+        // 找到最后一个类定义
+        if (line.startsWith('class ')) {
+            // 找到这个类的结束位置
+            let j = i + 1;
+            let indentLevel = 0;
+            let inClass = true;
+            
+            while (j < lines.length && inClass) {
+                const nextLine = lines[j].trim();
+                if (nextLine === '') {
+                    j++;
+                    continue;
+                }
+                
+                const nextIndent = lines[j].length - lines[j].trimStart().length;
+                if (nextIndent === 0 && nextLine !== '') {
+                    // 到达了顶级代码，类定义结束
+                    lastClassLine = j - 1;
+                    inClass = false;
+                } else {
+                    j++;
+                }
+            }
+            
+            if (inClass) {
+                // 如果到了文件末尾还在类中
+                lastClassLine = lines.length - 1;
+            }
+        }
+        
+        // 找到if __name__ == "__main__"块
+        if (line.includes('if __name__') && line.includes('__main__')) {
+            mainBlockLine = i;
+            break;
+        }
+    }
+    
+    // 确定插入位置
+    let insertLine;
+    if (mainBlockLine >= 0) {
+        // 在main块之前插入
+        insertLine = mainBlockLine;
+    } else if (lastClassLine >= 0) {
+        // 在最后一个类之后插入
+        insertLine = lastClassLine + 1;
+    } else {
+        // 在文件末尾插入
+        insertLine = lines.length;
+    }
+    
+    return { line: insertLine };
+}
+
+// 更新模板使用次数
+function updateTemplateUsage(templateId) {
+    fetch('/modules/api/templates/usage/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify({ template_id: templateId })
+    }).catch(error => {
+        console.error('更新模板使用次数失败:', error);
+    });
+}
+
+// 辅助函数
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
 </script>
 
 <!-- 隐藏的CSRF token -->
