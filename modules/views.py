@@ -15,7 +15,7 @@ from django.utils import timezone
 from django.db.models import Count, Q
 from django.conf import settings
 from .file_manager import module_file_manager
-from .models import ModuleFile, ModuleEditSession, ModuleItem, ModuleCategory, DynamicModuleCategory
+from .models import ModuleFile, ModuleEditSession, ModuleItem, DynamicModuleCategory
 from .module_analyzer import module_analyzer, ModuleAnalyzer
 
 
@@ -167,19 +167,9 @@ def module_file_view(request, path):
         file_path = module_file_manager.workpieces_dir / relative_path
         all_items = module_analyzer.extract_all_items(file_path) if file_path.exists() else []
         
-        # 按分类组织模块项
-        module_items_by_category = {}
-        for category in ModuleCategory:
-            items = module_items.filter(category=category.value)
-            module_items_by_category[category.value] = {
-                'label': category.label,
-                'items': items,
-                'count': items.count()
-            }
-        
         # 获取所有可用分类（包括动态分类）
         all_categories = DynamicModuleCategory.get_all_categories()
-        # 转换为模板所需的格式 (value, label) 元组列表
+        # 转换为模板所需的格式，只包含可选择的分类
         categories_choices = [(cat['key'], cat['label']) for cat in all_categories if cat.get('is_selectable', True)]
         
         context = {
@@ -191,7 +181,6 @@ def module_file_view(request, path):
             'can_edit': len(active_sessions) == 0,  # 只有没有其他人编辑时才能编辑
             'is_editing': current_user_session is not None,  # 当前用户是否正在编辑
             'module_items': module_items,
-            'module_items_by_category': module_items_by_category,
             'all_items': all_items,  # 当前文件的__all__字段内容
             'categories': categories_choices,  # 所有可选的分类
             'all_categories': all_categories,  # 完整的分类信息（用于其他用途）
@@ -624,7 +613,7 @@ def scan_modules_api(request):
                 ModuleItem.objects.create(
                     module_file=module_file,
                     name=item_name,
-                    category=ModuleCategory.OTHER,  # 默认分类
+                    category='other',  # 默认分类
                     auto_detected=True,
                     classified_by=None  # 自动检测的项目没有分类者
                 )
@@ -831,7 +820,7 @@ def analyze_file_api(request):
                 name=item_name,
                 module_file=module_file,
                 defaults={
-                    'category': ModuleCategory.OTHER,
+                    'category': 'other',
                     'auto_detected': True,
                     'classified_by': request.user,
                 }
@@ -952,12 +941,12 @@ def manage_categories_api(request):
                     'error': '分类键和标签不能为空'
                 })
             
-            # 检查是否与默认分类冲突
-            default_keys = [choice[0] for choice in ModuleCategory.choices]
-            if key in default_keys:
+            # 检查是否与现有分类冲突
+            existing_categories = DynamicModuleCategory.objects.filter(key=key)
+            if existing_categories.exists():
                 return JsonResponse({
                     'success': False,
-                    'error': f'分类键 "{key}" 与系统默认分类冲突'
+                    'error': f'分类键 "{key}" 已存在'
                 })
             
             # 创建新分类
@@ -1004,66 +993,36 @@ def manage_categories_api(request):
                     'error': '分类键不能为空'
                 })
             
-            # 检查是否为默认分类的可选状态更新
-            default_keys = [choice[0] for choice in ModuleCategory.choices]
-            if key in default_keys:
-                # 对于默认分类，只允许更新is_selectable状态（通过特殊处理）
+            # 更新分类
+            try:
+                category = DynamicModuleCategory.objects.get(key=key)
+                
+                # 更新字段
+                if 'label' in data:
+                    category.label = data['label'].strip()
+                if 'description' in data:
+                    category.description = data['description'].strip()
+                if 'icon' in data:
+                    category.icon = data['icon'].strip()
+                if 'color' in data:
+                    category.color = data['color'].strip()
                 if 'is_selectable' in data:
-                    # 这里需要特殊处理，因为默认分类不在数据库中
-                    # 我们可以创建一个特殊的记录来覆盖默认设置
-                    defaults = {
-                        'key': key,
-                        'label': dict(ModuleCategory.choices)[key],
-                        'is_default': True,
-                        'is_selectable': data.get('is_selectable', True),
-                        'order': data.get('order', 0),
-                        'created_by': request.user
-                    }
-                    category, created = DynamicModuleCategory.objects.update_or_create(
-                        key=key,
-                        defaults=defaults
-                    )
+                    category.is_selectable = data['is_selectable']
+                if 'order' in data:
+                    category.order = data['order']
+                
+                category.save()
+                
+                return JsonResponse({
+                    'success': True,
+                    'message': f'成功更新分类 "{category.label}"'
+                })
                     
-                    return JsonResponse({
-                        'success': True,
-                        'message': f'成功更新分类 "{category.label}" 的可选状态'
-                    })
-                else:
-                    return JsonResponse({
-                        'success': False,
-                        'error': '默认分类只能修改可选状态'
-                    })
-            else:
-                # 更新自定义分类
-                try:
-                    category = DynamicModuleCategory.objects.get(key=key)
-                    
-                    # 更新字段
-                    if 'label' in data:
-                        category.label = data['label'].strip()
-                    if 'description' in data:
-                        category.description = data['description'].strip()
-                    if 'icon' in data:
-                        category.icon = data['icon'].strip()
-                    if 'color' in data:
-                        category.color = data['color'].strip()
-                    if 'is_selectable' in data:
-                        category.is_selectable = data['is_selectable']
-                    if 'order' in data:
-                        category.order = data['order']
-                    
-                    category.save()
-                    
-                    return JsonResponse({
-                        'success': True,
-                        'message': f'成功更新分类 "{category.label}"'
-                    })
-                    
-                except DynamicModuleCategory.DoesNotExist:
-                    return JsonResponse({
-                        'success': False,
-                        'error': f'分类 "{key}" 不存在'
-                    })
+            except DynamicModuleCategory.DoesNotExist:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'分类 "{key}" 不存在'
+                })
             
         except Exception as e:
             return JsonResponse({
@@ -1096,11 +1055,8 @@ def manage_categories_api(request):
                 # 获取分类标签用于消息显示
                 category_label = key
                 try:
-                    if key in [choice[0] for choice in ModuleCategory.choices]:
-                        category_label = dict(ModuleCategory.choices)[key]
-                    else:
-                        category_obj = DynamicModuleCategory.objects.get(key=key)
-                        category_label = category_obj.label
+                    category_obj = DynamicModuleCategory.objects.get(key=key)
+                    category_label = category_obj.label
                 except:
                     pass
                 
@@ -1594,4 +1550,298 @@ def update_template_usage_api(request):
         return JsonResponse({
             'success': False,
             'error': f'更新使用次数失败: {str(e)}'
+        })
+
+
+@require_http_methods(["GET", "POST", "PUT", "DELETE"])
+@login_required
+def manage_styles_api(request):
+    """
+    模块风格管理API
+    GET: 获取所有风格列表
+    POST: 创建新风格
+    PUT: 更新风格
+    DELETE: 删除风格
+    """
+    # 检查管理员权限
+    if not request.user.is_staff:
+        return JsonResponse({
+            'success': False,
+            'error': '权限不足，仅管理员可以管理模块风格'
+        })
+    
+    from .models import ModuleStyle
+    
+    if request.method == 'GET':
+        # 获取所有风格列表
+        try:
+            styles = ModuleStyle.objects.all().order_by('order', 'id')
+            styles_data = []
+            
+            for style in styles:
+                styles_data.append({
+                    'id': style.id,
+                    'name': style.name,
+                    'description': style.description,
+                    'code_snippet': style.code_snippet,
+                    'order': style.order,
+                    'is_active': style.is_active,
+                    'usage_count': style.usage_count,
+                    'created_at': style.created_at.isoformat() if style.created_at else None,
+                    'updated_at': style.updated_at.isoformat() if style.updated_at else None
+                })
+            
+            return JsonResponse({
+                'success': True,
+                'styles': styles_data
+            })
+            
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': f'获取风格列表失败: {str(e)}'
+            })
+    
+    elif request.method == 'POST':
+        # 创建新风格
+        try:
+            data = json.loads(request.body)
+            
+            # 验证必填字段
+            if not data.get('name'):
+                return JsonResponse({
+                    'success': False,
+                    'error': '风格名称不能为空'
+                })
+            
+            if not data.get('code_snippet'):
+                return JsonResponse({
+                    'success': False,
+                    'error': '代码片段不能为空'
+                })
+            
+            # 检查名称是否已存在
+            if ModuleStyle.objects.filter(name=data['name']).exists():
+                return JsonResponse({
+                    'success': False,
+                    'error': '风格名称已存在'
+                })
+            
+            # 创建新风格
+            style = ModuleStyle.objects.create(
+                name=data['name'],
+                description=data.get('description', ''),
+                code_snippet=data['code_snippet'],
+                order=data.get('order', 0),
+                is_active=data.get('is_active', True),
+                created_by=request.user
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'风格 "{style.name}" 创建成功',
+                'style': {
+                    'id': style.id,
+                    'name': style.name,
+                    'description': style.description,
+                    'code_snippet': style.code_snippet,
+                    'order': style.order,
+                    'is_active': style.is_active,
+                    'usage_count': style.usage_count
+                }
+            })
+            
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'error': '无效的JSON数据'
+            })
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': f'创建风格失败: {str(e)}'
+            })
+    
+    elif request.method == 'PUT':
+        # 更新风格
+        try:
+            data = json.loads(request.body)
+            style_id = data.get('id')
+            
+            if not style_id:
+                return JsonResponse({
+                    'success': False,
+                    'error': '风格ID不能为空'
+                })
+            
+            try:
+                style = ModuleStyle.objects.get(id=style_id)
+            except ModuleStyle.DoesNotExist:
+                return JsonResponse({
+                    'success': False,
+                    'error': '风格不存在'
+                })
+            
+            # 更新字段
+            if 'name' in data:
+                # 检查新名称是否与其他风格冲突
+                if data['name'] != style.name and ModuleStyle.objects.filter(name=data['name']).exists():
+                    return JsonResponse({
+                        'success': False,
+                        'error': '风格名称已存在'
+                    })
+                style.name = data['name']
+            
+            if 'description' in data:
+                style.description = data['description']
+            
+            if 'code_snippet' in data:
+                if not data['code_snippet']:
+                    return JsonResponse({
+                        'success': False,
+                        'error': '代码片段不能为空'
+                    })
+                style.code_snippet = data['code_snippet']
+            
+            if 'order' in data:
+                style.order = data['order']
+            
+            if 'is_active' in data:
+                style.is_active = data['is_active']
+            
+            style.save()
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'风格 "{style.name}" 更新成功'
+            })
+            
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'error': '无效的JSON数据'
+            })
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': f'更新风格失败: {str(e)}'
+            })
+    
+    elif request.method == 'DELETE':
+        # 删除风格
+        try:
+            data = json.loads(request.body)
+            style_id = data.get('id')
+            
+            if not style_id:
+                return JsonResponse({
+                    'success': False,
+                    'error': '风格ID不能为空'
+                })
+            
+            try:
+                style = ModuleStyle.objects.get(id=style_id)
+                style_name = style.name
+                style.delete()
+                
+                return JsonResponse({
+                    'success': True,
+                    'message': f'风格 "{style_name}" 删除成功'
+                })
+                
+            except ModuleStyle.DoesNotExist:
+                return JsonResponse({
+                    'success': False,
+                    'error': '风格不存在'
+                })
+            
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'error': '无效的JSON数据'
+            })
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': f'删除风格失败: {str(e)}'
+            })
+
+
+@require_http_methods(["GET"])
+@login_required
+def get_styles_for_editor_api(request):
+    """
+    获取用于编辑器的风格列表（仅返回启用的风格）
+    """
+    try:
+        from .models import ModuleStyle
+        
+        styles = ModuleStyle.objects.filter(is_active=True).order_by('order', 'id')
+        styles_data = []
+        
+        for style in styles:
+            styles_data.append({
+                'id': style.id,
+                'name': style.name,
+                'description': style.description,
+                'code_snippet': style.code_snippet,  # 原始未缩进的代码，用于插入
+                'formatted_code': style.get_formatted_code(),  # 格式化代码，仅用于预览
+                'order': style.order
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'styles': styles_data
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': f'获取编辑器风格失败: {str(e)}'
+        })
+
+
+@require_POST
+@login_required
+def use_style_api(request):
+    """
+    使用风格API - 增加使用计数
+    """
+    try:
+        data = json.loads(request.body)
+        style_id = data.get('style_id')
+        
+        if not style_id:
+            return JsonResponse({
+                'success': False,
+                'error': '风格ID不能为空'
+            })
+        
+        from .models import ModuleStyle
+        
+        try:
+            style = ModuleStyle.objects.get(id=style_id, is_active=True)
+            style.increment_usage()
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'风格 "{style.name}" 使用成功',
+                'usage_count': style.usage_count
+            })
+            
+        except ModuleStyle.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': '风格不存在或已禁用'
+            })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': '无效的JSON数据'
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': f'使用风格失败: {str(e)}'
         })

@@ -419,6 +419,106 @@
     background-color: #d1ecf1;
     border-color: #bee5eb;
 }
+
+/* 模块风格样式 */
+.style-item {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: white;
+}
+
+.style-item:hover {
+    border-color: #007bff;
+    box-shadow: 0 2px 5px rgba(0,123,255,0.1);
+}
+
+.style-item.selected {
+    border-color: #007bff;
+    background-color: #f8f9ff;
+    box-shadow: 0 2px 10px rgba(0,123,255,0.2);
+}
+
+.style-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+.style-description {
+    color: #666;
+    font-size: 0.9em;
+    margin-bottom: 8px;
+}
+
+.style-preview-mini {
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    padding: 8px;
+    overflow: hidden;
+}
+
+.style-preview-mini pre {
+    margin: 0;
+    font-size: 0.8em;
+    color: #333;
+}
+
+.style-preview-container {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.style-preview-full pre {
+    font-size: 0.9em;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.styles-list {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 10px;
+}
+
+/* 类列表选择状态 */
+.class-item.selected {
+    background-color: #e3f2fd;
+    border-color: #2196f3;
+    box-shadow: 0 2px 4px rgba(33, 150, 243, 0.2);
+}
+
+.class-item {
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.class-item:hover {
+    background-color: #f5f5f5;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.class-name-area {
+    cursor: pointer;
+    border-radius: 4px;
+    padding: 4px;
+    transition: background-color 0.2s;
+}
+
+.class-name-area:hover {
+    background-color: #e3f2fd;
+}
+
+.class-item.selected .class-name-area {
+    background-color: #bbdefb;
+}
 </style>
 {% endblock %}
 
@@ -596,51 +696,6 @@
                             <small>无法检测到可导出的模块</small>
                         </div>
                     {% endif %}
-                    
-                    <!-- 已分类的模块（按分类显示） -->
-                    {% if module_items %}
-                        <div class="mt-3">
-                            <h6 class="text-muted mb-2">
-                                <i class="fas fa-layer-group me-1"></i>已分类模块
-                            </h6>
-                            {% for category, info in module_items_by_category.items %}
-                                {% if info.items %}
-                                <div class="category-section mb-2">
-                                    <div class="category-header p-2 bg-light rounded">
-                                        <small class="fw-bold">{{ info.label }}</small>
-                                        <span class="badge bg-primary ms-1">{{ info.count }}</span>
-                                    </div>
-                                    {% for module_item in info.items %}
-                                    <div class="module-item-classified p-2 border-start border-3 border-primary ms-1 mt-1">
-                                        <div class="d-flex justify-content-between align-items-center">
-                                            <div class="flex-grow-1">
-                                                <div class="module-name">{{ module_item.name }}</div>
-                                                {% if module_item.description %}
-                                                    <small class="text-muted d-block">{{ module_item.description|truncatewords:5 }}</small>
-                                                {% endif %}
-                                                {% if module_item.classified_by %}
-                                                    <small class="text-success d-block">
-                                                        <i class="fas fa-user me-1"></i>
-                                                        {{ module_item.classified_by.username }}
-                                                    </small>
-                                                {% endif %}
-                                            </div>
-                                            <button class="btn btn-sm btn-outline-secondary reclassify-btn" 
-                                                    data-module-id="{{ module_item.id }}" 
-                                                    data-module-name="{{ module_item.name }}"
-                                                    data-current-category="{{ module_item.category }}"
-                                                    data-current-description="{{ module_item.description|default:'' }}"
-                                                    title="重新分类">
-                                                <i class="fas fa-edit"></i>
-                                            </button>
-                                        </div>
-                                    </div>
-                                    {% endfor %}
-                                </div>
-                                {% endif %}
-                            {% endfor %}
-                        </div>
-                    {% endif %}
                 </div>
             </div>
             
@@ -662,6 +717,9 @@
                     <div class="mt-2">
                         <button class="btn btn-sm btn-outline-success w-100" onclick="analyzeAndUpdateClasses()">
                             <i class="fas fa-sync-alt me-1"></i>刷新类列表
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary w-100 mt-1" onclick="showModuleStylesModal()" title="插入代码风格到当前类">
+                            <i class="fas fa-palette me-1"></i>模块风格
                         </button>
                     </div>
                 </div>
@@ -840,6 +898,54 @@
         </div>
     </div>
 </div>
+
+<!-- 模块风格选择对话框 -->
+<div class="modal fade" id="moduleStylesModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-palette me-2"></i>选择模块风格
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>当前选中的类:</h6>
+                        <div class="alert alert-info" id="selectedClassInfo">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <span id="selectedClassName">请先选择一个类</span>
+                        </div>
+                        
+                        <h6>可用的模块风格:</h6>
+                        <div id="moduleStylesList" class="styles-list">
+                            <div class="text-center">
+                                <i class="fas fa-spinner fa-spin"></i> 加载风格列表...
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>风格预览:</h6>
+                        <div id="stylePreviewContainer" class="style-preview-container">
+                            <div class="alert alert-secondary text-center">
+                                <i class="fas fa-eye-slash"></i>
+                                <p class="mb-0">请选择一个风格来预览</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="insertStyleBtn" disabled>
+                    <i class="fas fa-code me-1"></i>插入到类中
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 
@@ -1447,7 +1553,7 @@ document.addEventListener('DOMContentLoaded', function() {
             `;
         }
         
-        // 保留已分类模块的显示（这部分来自Django模板，暂时保持不变）
+        // 模块信息侧边栏内容保持不变
         const existingClassifiedModules = moduleInfoCard.querySelector('.mt-3');
         if (existingClassifiedModules) {
             newContent += existingClassifiedModules.outerHTML;
@@ -1690,12 +1796,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // 处理分类按钮点击
     document.addEventListener('click', function(e) {
         if (e.target.classList.contains('classify-btn') || 
-            e.target.closest('.classify-btn') ||
-            e.target.classList.contains('reclassify-btn') || 
-            e.target.closest('.reclassify-btn')) {
+            e.target.closest('.classify-btn')) {
             
-            const btn = e.target.classList.contains('classify-btn') || e.target.classList.contains('reclassify-btn') ? 
-                        e.target : e.target.closest('.classify-btn, .reclassify-btn');
+            const btn = e.target.classList.contains('classify-btn') ? 
+                        e.target : e.target.closest('.classify-btn');
             
             const moduleId = btn.getAttribute('data-module-id');
             const moduleName = btn.getAttribute('data-module-name');
@@ -1861,34 +1965,51 @@ function analyzeAndUpdateClasses() {
         return;
     }
     
-    // 获取代码内容 - 使用CodeMirror的getValue方法
-    const code = editorInstance.getValue();
-    
-    // 分析类定义
-    const classPattern = /^class\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\([^)]*\))?:/gm;
-    const classes = [];
-    let match;
-    
-    while ((match = classPattern.exec(code)) !== null) {
-        classes.push(match[1]);
-    }
-    
-    // 分析__all__内容
-    const allPattern = /__all__\s*=\s*\[(.*?)\]/s;
-    const allMatch = allPattern.exec(code);
-    const allList = [];
-    
-    if (allMatch) {
-        const itemPattern = /["']([^"']+)["']/g;
-        let itemMatch;
-        while ((itemMatch = itemPattern.exec(allMatch[1])) !== null) {
-            allList.push(itemMatch[1]);
+    try {
+        // 获取代码内容 - 使用CodeMirror的getValue方法
+        const code = editorInstance.getValue();
+        
+        // 增强的类定义正则表达式，支持多行类定义和装饰器
+        // 这个正则表达式与insertStyleToClass函数中使用的保持一致
+        const classPattern = /^(?:\s*@.*\n)*\s*class\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\([^)]*\))?:/gm;
+        const classes = [];
+        let match;
+        
+        console.log('开始分析类定义，代码长度:', code.length);
+        
+        while ((match = classPattern.exec(code)) !== null) {
+            const className = match[1];
+            if (!classes.includes(className)) { // 避免重复
+                classes.push(className);
+                console.log('发现类:', className);
+            }
         }
+        
+        console.log('共发现', classes.length, '个类:', classes);
+        
+        // 分析__all__内容
+        const allPattern = /__all__\s*=\s*\[(.*?)\]/s;
+        const allMatch = allPattern.exec(code);
+        const allList = [];
+        
+        if (allMatch) {
+            const itemPattern = /["']([^"']+)["']/g;
+            let itemMatch;
+            while ((itemMatch = itemPattern.exec(allMatch[1])) !== null) {
+                allList.push(itemMatch[1]);
+            }
+        }
+        
+        currentClasses = classes;
+        allItems = allList;
+        
+        console.log('分析完成 - 类:', currentClasses, '__all__项:', allItems);
+        updateClassListDisplay();
+        
+    } catch (error) {
+        console.error('类分析过程中发生错误:', error);
+        showAlert('类分析失败: ' + error.message, 'error');
     }
-    
-    currentClasses = classes;
-    allItems = allList;
-    updateClassListDisplay();
 }
 
 // 更新类列表显示
@@ -1915,21 +2036,22 @@ function updateClassListDisplay() {
     let html = '';
     currentClasses.forEach(className => {
         const isInAll = allItems.includes(className);
-        const cardClass = isInAll ? 'class-item-card mb-2 p-2 border rounded class-in-all' : 'class-item-card mb-2 p-2 border rounded';
+        const cardClass = isInAll ? 'class-item class-item-card mb-2 p-2 border rounded class-in-all' : 'class-item class-item-card mb-2 p-2 border rounded';
         const buttonClass = isInAll ? 'class-action-btn remove-btn' : 'class-action-btn add-btn';
         const buttonIcon = isInAll ? 'fas fa-minus' : 'fas fa-plus';
         const buttonTitle = isInAll ? '从__all__中删除' : '添加到__all__';
         const buttonAction = isInAll ? `removeFromAll('${className}')` : `addToAll('${className}')`;
         
         html += `
-            <div class="${cardClass}">
+            <div class="${cardClass}" data-class-name="${className}">
                 <div class="d-flex justify-content-between align-items-center">
-                    <div class="flex-grow-1">
+                    <div class="flex-grow-1 class-name-area" onclick="selectClass('${className}')">
                         <div class="class-name" title="${className}">
                             <i class="fas fa-cube text-primary me-1"></i>
                             <strong>${className}</strong>
                             ${isInAll ? '<small class="text-success ms-2">(已在__all__中)</small>' : ''}
                         </div>
+                        <small class="text-muted">点击选择此类</small>
                     </div>
                     <div class="class-actions">
                         <button class="${buttonClass}" 
@@ -2056,6 +2178,27 @@ function removeFromAll(className) {
     
     // 重新分析并更新显示
     setTimeout(analyzeAndUpdateClasses, 100);
+}
+
+// 选择类（用于模块风格功能）
+function selectClass(className) {
+    // 移除之前的选中状态
+    document.querySelectorAll('.class-item').forEach(item => {
+        item.classList.remove('selected');
+    });
+    
+    // 添加选中状态到当前项
+    const classItem = document.querySelector(`.class-item[data-class-name="${className}"]`);
+    if (classItem) {
+        classItem.classList.add('selected');
+        currentSelectedClass = {
+            name: className,
+            element: classItem
+        };
+        
+        // 显示选中提示
+        showAlert(`已选择类: ${className}`, 'success');
+    }
 }
 
 // =============== 模板类载入功能 ===============
@@ -2393,8 +2536,431 @@ function escapeHtml(text) {
     div.textContent = text;
     return div.innerHTML;
 }
+
+// 显示提示信息
+function showAlert(message, type = 'info') {
+    // 创建提示框
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    alertDiv.style.top = '20px';
+    alertDiv.style.right = '20px';
+    alertDiv.style.zIndex = '9999';
+    alertDiv.style.minWidth = '300px';
+    
+    // 设置图标
+    let icon = 'info-circle';
+    if (type === 'success') icon = 'check-circle';
+    else if (type === 'warning') icon = 'exclamation-triangle';
+    else if (type === 'error' || type === 'danger') icon = 'exclamation-circle';
+    
+    alertDiv.innerHTML = `
+        <i class="fas fa-${icon} me-2"></i>${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(alertDiv);
+    
+    // 自动移除提示框
+    setTimeout(() => {
+        if (alertDiv.parentElement) {
+            alertDiv.remove();
+        }
+    }, type === 'error' ? 5000 : 3000); // 错误信息显示更长时间
+}
+
+// =============== 模块风格相关功能 ===============
+
+// 全局变量
+let currentSelectedClass = null;
+let availableStyles = [];
+let selectedStyleId = null;
+
+// 显示模块风格选择模态框
+function showModuleStylesModal() {
+    // 首先检查是否处于编辑状态
+    if (!isEditMode) {
+        showAlert('只有在编辑模式下才能使用模块风格功能。请先点击"编辑"按钮。', 'warning');
+        return;
+    }
+    
+    // 检查是否有选中的类
+    const selectedClassElement = document.querySelector('.class-item.selected');
+    if (!selectedClassElement) {
+        showAlert('请先在类列表中选择一个类', 'warning');
+        return;
+    }
+    
+    // 获取选中类的信息 - 使用data属性获取纯净的类名
+    let className = selectedClassElement.getAttribute('data-class-name');
+    
+    // 如果data属性不存在，尝试从HTML中提取纯净的类名
+    if (!className) {
+        const classNameElement = selectedClassElement.querySelector('.class-name strong');
+        if (classNameElement) {
+            className = classNameElement.textContent.trim();
+        } else {
+            // 备用方法：从textContent中提取，去掉额外的文本
+            const fullText = selectedClassElement.querySelector('.class-name').textContent;
+            // 移除"(已在__all__中)"等额外文本
+            className = fullText.replace(/\s*\([^)]*\)\s*/g, '').trim();
+        }
+    }
+    
+    console.log('获取到的类名:', className);
+    
+    currentSelectedClass = {
+        name: className,
+        element: selectedClassElement
+    };
+    
+    // 更新模态框中的类信息显示
+    document.getElementById('selectedClassName').textContent = className;
+    
+    // 显示模态框
+    const modal = new bootstrap.Modal(document.getElementById('moduleStylesModal'));
+    modal.show();
+    
+    // 加载可用的模块风格
+    loadModuleStyles();
+}
+
+// 加载模块风格列表
+function loadModuleStyles() {
+    const container = document.getElementById('moduleStylesList');
+    container.innerHTML = '<div class="text-center"><i class="fas fa-spinner fa-spin"></i> 加载风格列表...</div>';
+    
+    fetch('/modules/api/editor-styles/')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                availableStyles = data.styles;
+                renderModuleStylesList();
+            } else {
+                container.innerHTML = '<div class="alert alert-danger">加载风格失败: ' + data.error + '</div>';
+            }
+        })
+        .catch(error => {
+            console.error('加载模块风格错误:', error);
+            container.innerHTML = '<div class="alert alert-danger">网络错误，无法加载风格列表</div>';
+        });
+}
+
+// 渲染模块风格列表
+function renderModuleStylesList() {
+    const container = document.getElementById('moduleStylesList');
+    
+    if (!availableStyles || availableStyles.length === 0) {
+        container.innerHTML = '<div class="alert alert-info">暂无可用的模块风格</div>';
+        return;
+    }
+    
+    let html = '';
+    availableStyles.forEach(style => {
+        const previewCode = style.code_snippet || style.formatted_code;
+        html += `
+            <div class="style-item" data-style-id="${style.id}" onclick="selectModuleStyle(${style.id})">
+                <div class="style-item-header">
+                    <strong>${style.name}</strong>
+                    <small class="text-muted">排序: ${style.order}</small>
+                </div>
+                ${style.description ? `<div class="style-description">${style.description}</div>` : ''}
+                <div class="style-preview-mini">
+                    <pre><code>${previewCode.substring(0, 100)}${previewCode.length > 100 ? '...' : ''}</code></pre>
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+// 选择模块风格
+function selectModuleStyle(styleId) {
+    selectedStyleId = styleId;
+    
+    // 更新选中状态
+    document.querySelectorAll('.style-item').forEach(item => {
+        item.classList.remove('selected');
+    });
+    document.querySelector(`[data-style-id="${styleId}"]`).classList.add('selected');
+    
+    // 显示预览
+    const style = availableStyles.find(s => s.id === styleId);
+    if (style) {
+        showStylePreview(style);
+        document.getElementById('insertStyleBtn').disabled = false;
+    }
+}
+
+// 显示风格预览
+function showStylePreview(style) {
+    const container = document.getElementById('stylePreviewContainer');
+    container.innerHTML = `
+        <div class="style-preview-full">
+            <h6>${style.name}</h6>
+            ${style.description ? `<p class="text-muted small">${style.description}</p>` : ''}
+            <pre class="bg-light p-3 rounded"><code>${style.code_snippet || style.formatted_code}</code></pre>
+            <small class="text-info">
+                <i class="fas fa-info-circle"></i> 
+                此代码将插入到类 "${currentSelectedClass.name}" 中
+            </small>
+        </div>
+    `;
+}
+
+// 插入风格到类中
+function insertStyleToClass() {
+    // 首先检查是否处于编辑状态
+    if (!isEditMode) {
+        showAlert('只有在编辑模式下才能插入模块风格。请先点击"编辑"按钮。', 'warning');
+        return;
+    }
+    
+    // 验证所有必需的变量
+    if (!selectedStyleId || !currentSelectedClass) {
+        showAlert('请选择一个风格和类', 'warning');
+        return;
+    }
+    
+    if (typeof availableStyles === 'undefined' || !availableStyles) {
+        showAlert('风格列表未加载，请刷新页面重试', 'error');
+        return;
+    }
+    
+    const style = availableStyles.find(s => s.id === selectedStyleId);
+    if (!style) {
+        showAlert('找不到选中的风格', 'error');
+        return;
+    }
+    
+    if (!editorInstance) {
+        showAlert('编辑器未初始化', 'error');
+        return;
+    }
+    
+    // 验证currentSelectedClass的结构
+    if (!currentSelectedClass.name) {
+        showAlert('选中的类信息不完整', 'error');
+        return;
+    }
+    
+    // 找到类在代码中的位置
+    const className = currentSelectedClass.name;
+    
+    // 清理类名，移除可能的额外字符和空白
+    const cleanClassName = className.replace(/\s*\([^)]*\)\s*/g, '').trim();
+    
+    console.log('原始类名:', className);
+    console.log('清理后类名:', cleanClassName);
+    
+    const content = editorInstance.getValue();
+    
+    if (!content || content.trim() === '') {
+        showAlert('编辑器内容为空', 'error');
+        return;
+    }
+    
+    const lines = content.split('\n');
+    
+    // 查找类定义行
+    let classLineIndex = -1;
+    // 使用与类分析一致的正则表达式模式，支持装饰器
+    const escapedClassName = cleanClassName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // 转义特殊字符
+    const classPattern = new RegExp(`^class\\s+${escapedClassName}\\s*(?:\\([^)]*\\))?:`);
+    
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        
+        if (classPattern.test(line)) {
+            classLineIndex = i;
+            console.log(`在第 ${i+1} 行找到类 ${cleanClassName}: ${line}`);
+            break;
+        }
+    }
+    
+    if (classLineIndex === -1) {
+        showAlert(`无法在代码中找到类 "${cleanClassName}" 的定义。请检查：
+1. 类名是否正确拼写
+2. 类定义是否符合Python语法格式
+3. 是否存在语法错误
+4. 编辑器内容是否已正确加载`, 'error');
+        return;
+    }
+    
+    // 检测类中现有成员的缩进级别
+    let classIndent = '';
+    let insertPosition = classLineIndex + 1;
+    
+    // 跳过空行和docstring，同时检测缩进
+    while (insertPosition < lines.length) {
+        const line = lines[insertPosition];
+        const trimmed = line.trim();
+        
+        // 跳过空行
+        if (trimmed === '') {
+            insertPosition++;
+            continue;
+        }
+        
+        // 跳过docstring的开始和结束
+        if (trimmed.startsWith('"""') || trimmed.startsWith("'''")) {
+            insertPosition++;
+            continue;
+        }
+        
+        // 如果找到类的第一个成员（def 或其他），检测其缩进
+        if (trimmed.startsWith('def ') || trimmed.startsWith('def\t') || 
+            (line.length > 0 && line[0] === ' ' && trimmed.length > 0)) {
+            // 计算这一行的缩进
+            const match = line.match(/^(\s*)/);
+            if (match) {
+                classIndent = match[1];
+                console.log('检测到类成员缩进:', JSON.stringify(classIndent), '长度:', classIndent.length);
+                break;
+            }
+        }
+        
+        // 如果遇到下一个类定义或其他顶级定义，停止搜索
+        if (trimmed.startsWith('class ') || trimmed.startsWith('def ') && line[0] !== ' ') {
+            break;
+        }
+        
+        insertPosition++;
+    }
+    
+    // 如果没有检测到缩进，使用默认的4个空格
+    if (classIndent === '') {
+        classIndent = '    '; // 4个空格作为默认缩进
+        console.log('使用默认缩进: 4个空格');
+    }
+    
+    // 插入风格代码 - 使用原始代码而不是预格式化的代码
+    const styleCode = style.code_snippet || style.formatted_code; // 优先使用原始代码
+    const styleLines = styleCode.split('\n');
+    
+    // 使用检测到的缩进级别格式化代码
+    const indentedStyleLines = styleLines.map(line => {
+        if (line.trim() === '') return line;
+        return classIndent + line; // 使用检测到的缩进
+    });
+    
+    // 在指定位置插入代码
+    lines.splice(insertPosition, 0, ...indentedStyleLines);
+    
+    // 更新编辑器内容
+    const newContent = lines.join('\n');
+    editorInstance.setValue(newContent);
+    
+    // 记录使用风格
+    recordStyleUsage(selectedStyleId);
+    
+    // 关闭模态框
+    const modal = bootstrap.Modal.getInstance(document.getElementById('moduleStylesModal'));
+    modal.hide();
+    
+    // 显示成功消息
+    showAlert(`成功将风格 "${style.name}" 插入到类 "${className}" 中！`, 'success');
+}
+
+// 获取CSRF token
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+// 记录风格使用情况
+function recordStyleUsage(styleId) {
+    fetch('/modules/api/use-style/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({
+            style_id: styleId
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (!data.success) {
+            console.warn('记录风格使用失败:', data.error);
+        }
+    })
+    .catch(error => {
+        console.warn('记录风格使用错误:', error);
+    });
+}
+
+// 绑定插入按钮事件
+document.addEventListener('DOMContentLoaded', function() {
+    const insertBtn = document.getElementById('insertStyleBtn');
+    if (insertBtn) {
+        insertBtn.addEventListener('click', insertStyleToClass);
+    }
+});
+
+// 修改类列表点击事件，支持选择状态
+function enhanceClassListSelection() {
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.class-item')) {
+            // 移除之前的选中状态
+            document.querySelectorAll('.class-item').forEach(item => {
+                item.classList.remove('selected');
+            });
+            
+            // 添加选中状态到当前项
+            const classItem = e.target.closest('.class-item');
+            classItem.classList.add('selected');
+        }
+    });
+}
+
+// 初始化类选择增强功能
+enhanceClassListSelection();
+
 </script>
 
+<!-- 模块风格选择模态框 -->
+<div class="modal fade" id="moduleStylesModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-palette me-2"></i>选择模块风格
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    选择下方的代码风格插入到当前光标位置，代码会自动格式化并应用正确的缩进。
+                </div>
+                <div id="moduleStylesList" class="row">
+                    <div class="col-12 text-center">
+                        <i class="fas fa-spinner fa-spin"></i> 加载中...
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                <button type="button" class="btn btn-outline-primary" onclick="loadModuleStyles()">
+                    <i class="fas fa-sync me-2"></i>刷新列表
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- 隐藏的CSRF token -->
-{% csrf_token %}
-{% endblock %}
+<!-- {% csrf_token %}
+{% endblock %} -->

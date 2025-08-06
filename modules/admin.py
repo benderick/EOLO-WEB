@@ -2,7 +2,7 @@
 模块管理 Django Admin 配置
 """
 from django.contrib import admin
-from .models import ModuleFile, ModuleEditSession, ModuleItem, DynamicModuleCategory
+from .models import ModuleFile, ModuleEditSession, ModuleItem, DynamicModuleCategory, ModuleStyle
 
 
 @admin.register(DynamicModuleCategory)
@@ -20,6 +20,56 @@ class DynamicModuleCategoryAdmin(admin.ModelAdmin):
         }),
         ('元数据', {
             'fields': ('is_default', 'created_by', 'created_at')
+        }),
+    )
+    
+    def save_model(self, request, obj, form, change):
+        """保存时自动设置创建者"""
+        if not change:  # 仅在创建时设置
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+    
+    def has_module_permission(self, request):
+        """只有管理员可以访问此模块"""
+        return request.user.is_superuser
+    
+    def has_view_permission(self, request, obj=None):
+        """只有管理员可以查看"""
+        return request.user.is_superuser
+    
+    def has_add_permission(self, request):
+        """只有管理员可以添加"""
+        return request.user.is_superuser
+    
+    def has_change_permission(self, request, obj=None):
+        """只有管理员可以修改"""
+        return request.user.is_superuser
+    
+    def has_delete_permission(self, request, obj=None):
+        """只有管理员可以删除"""
+        return request.user.is_superuser
+
+
+@admin.register(ModuleStyle)
+class ModuleStyleAdmin(admin.ModelAdmin):
+    """模块风格管理"""
+    list_display = ('name', 'description', 'usage_count', 'order', 'is_active', 'created_by', 'created_at')
+    list_filter = ('is_active', 'created_at', 'created_by')
+    search_fields = ('name', 'description')
+    readonly_fields = ('created_at', 'updated_at', 'usage_count')
+    ordering = ['order', 'name']
+    
+    fieldsets = (
+        ('基本信息', {
+            'fields': ('name', 'description', 'order', 'is_active')
+        }),
+        ('代码内容', {
+            'fields': ('code_snippet',),
+            'classes': ('wide',)
+        }),
+        ('统计信息', {
+            'fields': ('usage_count', 'created_at', 'updated_at'),
+            'classes': ('collapse',)
         }),
     )
     

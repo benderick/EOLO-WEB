@@ -16,15 +16,9 @@ class FileStatus(models.TextChoices):
     UNAVAILABLE = 'unavailable', '不可用' # ❌
 
 
-class ModuleCategory(models.TextChoices):
-    """模块分类枚举"""
-    ATTENTION = 'attention', 'Attention'
-    CONVOLUTION = 'convolution', 'Convolution'
-    DOWNSAMPLE = 'downsample', 'Downsample'
-    FUSION = 'fusion', 'Fusion'
-    HEAD = 'head', 'Head'
-    BLOCK = 'block', 'Block'
-    OTHER = 'other', 'Other'
+# 注意：ModuleCategory 枚举已被移除
+# 所有分类现在都通过 DynamicModuleCategory 模型从数据库动态获取
+# 这样实现了完全的数据库驱动分类系统
 
 
 class DynamicModuleCategory(models.Model):
@@ -53,49 +47,23 @@ class DynamicModuleCategory(models.Model):
     
     @classmethod
     def get_all_categories(cls):
-        """获取所有分类（包括默认分类和动态分类）"""
+        """获取所有分类（完全从数据库动态获取）"""
         categories = []
         
-        # 定义默认分类的配置
-        default_categories_config = {
-            'attention': {'icon': 'fas fa-eye', 'color': 'info', 'order': 10},
-            'convolution': {'icon': 'fas fa-filter', 'color': 'primary', 'order': 20},
-            'downsample': {'icon': 'fas fa-compress-arrows-alt', 'color': 'warning', 'order': 30},
-            'fusion': {'icon': 'fas fa-project-diagram', 'color': 'success', 'order': 40},
-            'head': {'icon': 'fas fa-brain', 'color': 'danger', 'order': 50},
-            'block': {'icon': 'fas fa-th-large', 'color': 'secondary', 'order': 60},
-            'other': {'icon': 'fas fa-cube', 'color': 'dark', 'order': 999},
-        }
-        
-        # 添加默认的固定分类
-        for choice in ModuleCategory.choices:
-            config = default_categories_config.get(choice[0], {})
-            categories.append({
-                'key': choice[0],
-                'label': choice[1],
-                'icon': config.get('icon', 'fas fa-cube'),
-                'color': config.get('color', 'primary'),
-                'order': config.get('order', 0),
-                'is_default': True,
-                'is_deletable': choice[0] != 'other',  # Other分类不可删除
-                'is_selectable': True
-            })
-        
-        # 添加动态分类
-        for category in cls.objects.all():
+        # 直接从数据库获取所有分类，按order排序
+        for category in cls.objects.all().order_by('order', 'key'):
             categories.append({
                 'key': category.key,
                 'label': category.label,
                 'icon': category.icon,
                 'color': category.color,
                 'order': category.order,
-                'is_default': False,
-                'is_deletable': True,
+                'description': category.description,
+                'is_default': category.is_default,
+                'is_deletable': category.key != 'other',  # Other分类不可删除
                 'is_selectable': category.is_selectable
             })
         
-        # 按排序顺序排列
-        categories.sort(key=lambda x: x['order'])
         return categories
     
     def delete_and_migrate_modules(self):
@@ -119,21 +87,13 @@ class DynamicModuleCategory(models.Model):
         if category_key == 'other':
             raise ValueError("Other分类不能删除")
         
-        # 检查是否为默认分类
-        default_keys = [choice[0] for choice in ModuleCategory.choices if choice[0] != 'other']
-        
-        if category_key in default_keys:
-            # 删除默认分类：将模块迁移到Other
-            affected_modules = ModuleItem.objects.filter(category=category_key)
-            migrated_count = affected_modules.update(category='other')
-            return migrated_count
-        else:
-            # 删除自定义分类
-            try:
-                category = cls.objects.get(key=category_key)
-                return category.delete_and_migrate_modules()
-            except cls.DoesNotExist:
-                return 0
+        # 检查是否为数据库中的分类
+        try:
+            category = cls.objects.get(key=category_key)
+            return category.delete_and_migrate_modules()
+        except cls.DoesNotExist:
+            # 分类不存在，直接返回0
+            return 0
 
 
 class ModuleFile(models.Model):
@@ -292,12 +252,7 @@ class ModuleItem(models.Model):
     
     def get_category_display(self):
         """获取分类显示名称"""
-        # 首先检查是否是默认分类
-        for choice in ModuleCategory.choices:
-            if choice[0] == self.category:
-                return choice[1]
-        
-        # 检查动态分类
+        # 从数据库查找动态分类
         try:
             dynamic_cat = DynamicModuleCategory.objects.get(key=self.category)
             return dynamic_cat.label
@@ -361,3 +316,53 @@ class CodeTemplate(models.Model):
                 result = result.replace(f'???{placeholder}', replacement)
         
         return result
+
+
+class ModuleStyle(models.Model):
+    """
+    模块风格代码片段
+    用于在模块编辑时为类添加常用的代码模式
+    """
+    name = models.CharField(max_length=100, unique=True, verbose_name="风格名称")
+    description = models.TextField(blank=True, verbose_name="风格描述")
+    code_snippet = models.TextField(verbose_name="代码片段")
+    
+    # 元数据
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="创建者")
+    
+    # 使用统计和排序
+    usage_count = models.PositiveIntegerField(default=0, verbose_name="使用次数")
+    order = models.IntegerField(default=0, verbose_name="排序顺序")
+    is_active = models.BooleanField(default=True, verbose_name="是否启用")
+    
+    class Meta:
+        verbose_name = "模块风格"
+        verbose_name_plural = "模块风格"
+        ordering = ['order', 'name']
+    
+    def __str__(self):
+        return f"{self.name}"
+    
+    def increment_usage(self):
+        """增加使用次数"""
+        self.usage_count += 1
+        self.save(update_fields=['usage_count'])
+    
+    def get_formatted_code(self, indent_level=1):
+        """
+        获取格式化后的代码片段，应用正确的缩进
+        indent_level: 缩进级别，通常类内容为1（4个空格）
+        """
+        indent = "    " * indent_level  # Python标准4空格缩进
+        lines = self.code_snippet.strip().split('\n')
+        formatted_lines = []
+        
+        for line in lines:
+            if line.strip():  # 非空行添加缩进
+                formatted_lines.append(indent + line.rstrip())
+            else:  # 空行保持空白
+                formatted_lines.append("")
+        
+        return '\n'.join(formatted_lines)

@@ -45,4 +45,9 @@ urlpatterns = [
     path('api/templates/update/', views.update_template_api, name='update_template'),
     path('api/templates/delete/', views.delete_template_api, name='delete_template'),
     path('api/templates/usage/', views.update_template_usage_api, name='update_template_usage'),
+    
+    # 模块风格管理API（仅管理员）
+    path('api/manage-styles/', views.manage_styles_api, name='manage_styles'),
+    path('api/editor-styles/', views.get_styles_for_editor_api, name='editor_styles'),
+    path('api/use-style/', views.use_style_api, name='use_style'),
 ]
