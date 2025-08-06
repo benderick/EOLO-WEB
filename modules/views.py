@@ -79,9 +79,12 @@ def modules_list_view(request):
             module_items_by_category[cat_key] = {
                 'label': cat_info['label'],
                 'value': cat_key,
+                'icon': cat_info.get('icon', 'fas fa-cube'),
+                'color': cat_info.get('color', 'primary'),
+                'is_selectable': cat_info.get('is_selectable', True),
+                'is_deletable': cat_info.get('is_deletable', True),
                 'modules': modules,
-                'count': modules.count(),
-                'is_deletable': cat_info['is_deletable']
+                'count': modules.count()
             }
         
         # 模块统计
@@ -174,6 +177,11 @@ def module_file_view(request, path):
                 'count': items.count()
             }
         
+        # 获取所有可用分类（包括动态分类）
+        all_categories = DynamicModuleCategory.get_all_categories()
+        # 转换为模板所需的格式 (value, label) 元组列表
+        categories_choices = [(cat['key'], cat['label']) for cat in all_categories if cat.get('is_selectable', True)]
+        
         context = {
             'file_path': relative_path,
             'file_name': relative_path.split('/')[-1],
@@ -185,7 +193,8 @@ def module_file_view(request, path):
             'module_items': module_items,
             'module_items_by_category': module_items_by_category,
             'all_items': all_items,  # 当前文件的__all__字段内容
-            'categories': ModuleCategory.choices,  # 所有可用分类
+            'categories': categories_choices,  # 所有可选的分类
+            'all_categories': all_categories,  # 完整的分类信息（用于其他用途）
         }
         
         return render(request, 'modules/module_file_editor.html', context)
@@ -656,9 +665,12 @@ def classify_module_api(request):
         if not module_id or not category:
             return JsonResponse({'success': False, 'error': '参数不完整'})
         
-        # 验证分类是否有效
-        if category not in [choice[0] for choice in ModuleCategory.choices]:
-            return JsonResponse({'success': False, 'error': '无效的分类'})
+        # 验证分类是否有效（包括默认分类和动态分类）
+        all_categories = DynamicModuleCategory.get_all_categories()
+        valid_categories = [cat['key'] for cat in all_categories]
+        
+        if category not in valid_categories:
+            return JsonResponse({'success': False, 'error': f'无效的分类: {category}'})
         
         # 获取模块项
         try:
@@ -700,8 +712,13 @@ def get_modules_by_category_api(request):
     try:
         category = request.GET.get('category')
         
-        if category and category not in [choice[0] for choice in ModuleCategory.choices]:
-            return JsonResponse({'success': False, 'error': '无效的分类'})
+        # 验证分类是否有效（包括默认分类和动态分类）
+        if category:
+            all_categories = DynamicModuleCategory.get_all_categories()
+            valid_categories = [cat['key'] for cat in all_categories]
+            
+            if category not in valid_categories:
+                return JsonResponse({'success': False, 'error': f'无效的分类: {category}'})
         
         # 构建查询
         modules_query = ModuleItem.objects.select_related('module_file')
@@ -897,7 +914,7 @@ def analyze_file_api(request):
         })
 
 
-@require_http_methods(["GET", "POST", "DELETE"])
+@require_http_methods(["GET", "POST", "DELETE", "PUT"])
 @login_required
 def manage_categories_api(request):
     """
@@ -924,6 +941,10 @@ def manage_categories_api(request):
             key = data.get('key', '').strip()
             label = data.get('label', '').strip()
             description = data.get('description', '').strip()
+            icon = data.get('icon', 'fas fa-cube').strip()
+            color = data.get('color', 'primary').strip()
+            is_selectable = data.get('is_selectable', True)
+            order = data.get('order', 100)
             
             if not key or not label:
                 return JsonResponse({
@@ -944,6 +965,10 @@ def manage_categories_api(request):
                 key=key,
                 label=label,
                 description=description,
+                icon=icon,
+                color=color,
+                is_selectable=is_selectable,
+                order=order,
                 created_by=request.user
             )
             
@@ -953,7 +978,11 @@ def manage_categories_api(request):
                 'category': {
                     'key': category.key,
                     'label': category.label,
-                    'description': category.description
+                    'description': category.description,
+                    'icon': category.icon,
+                    'color': category.color,
+                    'is_selectable': category.is_selectable,
+                    'order': category.order
                 }
             })
             
@@ -961,6 +990,85 @@ def manage_categories_api(request):
             return JsonResponse({
                 'success': False, 
                 'error': f'添加分类失败: {str(e)}'
+            })
+    
+    elif request.method == 'PUT':
+        # 更新分类（包括排序和可选状态）
+        try:
+            data = json.loads(request.body)
+            key = data.get('key', '').strip()
+            
+            if not key:
+                return JsonResponse({
+                    'success': False,
+                    'error': '分类键不能为空'
+                })
+            
+            # 检查是否为默认分类的可选状态更新
+            default_keys = [choice[0] for choice in ModuleCategory.choices]
+            if key in default_keys:
+                # 对于默认分类，只允许更新is_selectable状态（通过特殊处理）
+                if 'is_selectable' in data:
+                    # 这里需要特殊处理，因为默认分类不在数据库中
+                    # 我们可以创建一个特殊的记录来覆盖默认设置
+                    defaults = {
+                        'key': key,
+                        'label': dict(ModuleCategory.choices)[key],
+                        'is_default': True,
+                        'is_selectable': data.get('is_selectable', True),
+                        'order': data.get('order', 0),
+                        'created_by': request.user
+                    }
+                    category, created = DynamicModuleCategory.objects.update_or_create(
+                        key=key,
+                        defaults=defaults
+                    )
+                    
+                    return JsonResponse({
+                        'success': True,
+                        'message': f'成功更新分类 "{category.label}" 的可选状态'
+                    })
+                else:
+                    return JsonResponse({
+                        'success': False,
+                        'error': '默认分类只能修改可选状态'
+                    })
+            else:
+                # 更新自定义分类
+                try:
+                    category = DynamicModuleCategory.objects.get(key=key)
+                    
+                    # 更新字段
+                    if 'label' in data:
+                        category.label = data['label'].strip()
+                    if 'description' in data:
+                        category.description = data['description'].strip()
+                    if 'icon' in data:
+                        category.icon = data['icon'].strip()
+                    if 'color' in data:
+                        category.color = data['color'].strip()
+                    if 'is_selectable' in data:
+                        category.is_selectable = data['is_selectable']
+                    if 'order' in data:
+                        category.order = data['order']
+                    
+                    category.save()
+                    
+                    return JsonResponse({
+                        'success': True,
+                        'message': f'成功更新分类 "{category.label}"'
+                    })
+                    
+                except DynamicModuleCategory.DoesNotExist:
+                    return JsonResponse({
+                        'success': False,
+                        'error': f'分类 "{key}" 不存在'
+                    })
+            
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': f'更新分类失败: {str(e)}'
             })
     
     elif request.method == 'DELETE':
@@ -975,40 +1083,36 @@ def manage_categories_api(request):
                     'error': '分类键不能为空'
                 })
             
-            # 检查是否为默认分类
-            default_keys = [choice[0] for choice in ModuleCategory.choices]
-            if key in default_keys:
-                if key == 'other':
-                    return JsonResponse({
-                        'success': False,
-                        'error': '"Other" 分类不能删除'
-                    })
-                else:
-                    return JsonResponse({
-                        'success': False,
-                        'error': '系统默认分类不能删除'
-                    })
+            if key == 'other':
+                return JsonResponse({
+                    'success': False,
+                    'error': '"Other" 分类不能删除'
+                })
             
-            # 删除动态分类
+            # 使用模型方法删除分类并迁移模块
             try:
-                category = DynamicModuleCategory.objects.get(key=key)
-                category_label = category.label
+                migrated_count = DynamicModuleCategory.delete_category_and_migrate(key)
                 
-                # 将该分类下的所有模块转移到 "other" 分类
-                updated_count = ModuleItem.objects.filter(category=key).update(category='other')
-                
-                # 删除分类
-                category.delete()
+                # 获取分类标签用于消息显示
+                category_label = key
+                try:
+                    if key in [choice[0] for choice in ModuleCategory.choices]:
+                        category_label = dict(ModuleCategory.choices)[key]
+                    else:
+                        category_obj = DynamicModuleCategory.objects.get(key=key)
+                        category_label = category_obj.label
+                except:
+                    pass
                 
                 return JsonResponse({
                     'success': True,
-                    'message': f'成功删除分类 "{category_label}"，{updated_count} 个模块已转移到 "Other" 分类'
+                    'message': f'成功删除分类 "{category_label}"，{migrated_count} 个模块已转移到 "Other" 分类'
                 })
                 
-            except DynamicModuleCategory.DoesNotExist:
+            except ValueError as e:
                 return JsonResponse({
                     'success': False,
-                    'error': f'分类 "{key}" 不存在'
+                    'error': str(e)
                 })
             
         except Exception as e:

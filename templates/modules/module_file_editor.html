@@ -1107,6 +1107,72 @@ document.addEventListener('DOMContentLoaded', function() {
         showSaveStatus('已退出编辑模式', 'success');
     }
     
+    // 更新模块信息侧边栏显示
+    function updateModuleInfoSidebar(data) {
+        // 更新__all__字段模块显示
+        const moduleInfoCard = document.querySelector('.module-info-sidebar .card-body');
+        if (!moduleInfoCard) return;
+        
+        // 从当前编辑器内容中提取__all__项目
+        const code = editorInstance ? editorInstance.getValue() : '';
+        const allPattern = /__all__\s*=\s*\[(.*?)\]/s;
+        const allMatch = allPattern.exec(code);
+        const allItems = [];
+        
+        if (allMatch) {
+            const itemPattern = /["']([^"']+)["']/g;
+            let itemMatch;
+            while ((itemMatch = itemPattern.exec(allMatch[1])) !== null) {
+                allItems.push(itemMatch[1]);
+            }
+        }
+        
+        // 更新模块信息头部的徽章
+        const badge = document.querySelector('.module-info-sidebar .card-header .badge');
+        if (badge) {
+            badge.textContent = allItems.length;
+        }
+        
+        // 重新构建模块信息显示
+        let newContent = '';
+        
+        if (allItems.length > 0) {
+            newContent += `
+                <div class="mb-3">
+                    <h6 class="text-muted mb-2">
+                        <i class="fas fa-list me-1"></i>__all__ 字段模块
+                    </h6>
+                    <div class="module-items-list">
+            `;
+            
+            allItems.forEach(item => {
+                newContent += `
+                    <div class="module-item-card mb-2 p-2 border rounded">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="module-name">${item}</span>
+                            <small class="text-muted">模块</small>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            newContent += `
+                    </div>
+                </div>
+            `;
+        } else {
+            newContent += `
+                <div class="text-center text-muted py-3">
+                    <i class="fas fa-info-circle mb-2"></i>
+                    <p class="mb-0">该文件暂无__all__字段定义</p>
+                    <small>或者__all__字段为空</small>
+                </div>
+            `;
+        }
+        
+        moduleInfoCard.innerHTML = newContent;
+    }
+    
     // 监听内容变化
     editor.on('change', function(cm, change) {
         if (change.origin !== 'setValue' && isEditMode) {
@@ -1290,7 +1356,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 
                 // 更新模块信息侧边栏显示
-                updateModuleInfoSidebar(data);
+                if (typeof updateModuleInfoSidebar === 'function') {
+                    updateModuleInfoSidebar(data);
+                }
                 
                 // 重新分析类列表（使用保存后的内容）
                 setTimeout(() => {
@@ -1776,7 +1844,9 @@ document.addEventListener('DOMContentLoaded', function() {
     setTimeout(() => {
         analyzeAndUpdateClasses();
         // 同时初始化模块信息显示
-        updateModuleInfoSidebar({success: true});
+        if (typeof updateModuleInfoSidebar === 'function') {
+            updateModuleInfoSidebar({success: true});
+        }
     }, 1000);
 });
 

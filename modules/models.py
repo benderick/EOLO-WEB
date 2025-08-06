@@ -35,14 +35,18 @@ class DynamicModuleCategory(models.Model):
     key = models.CharField(max_length=50, unique=True, verbose_name="分类键")
     label = models.CharField(max_length=100, verbose_name="分类标签")
     description = models.TextField(blank=True, verbose_name="分类描述")
+    icon = models.CharField(max_length=50, default="fas fa-cube", verbose_name="图标类名")
+    color = models.CharField(max_length=20, default="primary", verbose_name="颜色主题")
     is_default = models.BooleanField(default=False, verbose_name="是否为默认分类")
+    is_selectable = models.BooleanField(default=True, verbose_name="是否可选择")
+    order = models.IntegerField(default=0, verbose_name="排序顺序")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="创建者")
     
     class Meta:
         verbose_name = "动态模块分类"
         verbose_name_plural = "动态模块分类"
-        ordering = ['key']
+        ordering = ['order', 'key']
     
     def __str__(self):
         return f"{self.label} ({self.key})"
@@ -52,13 +56,29 @@ class DynamicModuleCategory(models.Model):
         """获取所有分类（包括默认分类和动态分类）"""
         categories = []
         
+        # 定义默认分类的配置
+        default_categories_config = {
+            'attention': {'icon': 'fas fa-eye', 'color': 'info', 'order': 10},
+            'convolution': {'icon': 'fas fa-filter', 'color': 'primary', 'order': 20},
+            'downsample': {'icon': 'fas fa-compress-arrows-alt', 'color': 'warning', 'order': 30},
+            'fusion': {'icon': 'fas fa-project-diagram', 'color': 'success', 'order': 40},
+            'head': {'icon': 'fas fa-brain', 'color': 'danger', 'order': 50},
+            'block': {'icon': 'fas fa-th-large', 'color': 'secondary', 'order': 60},
+            'other': {'icon': 'fas fa-cube', 'color': 'dark', 'order': 999},
+        }
+        
         # 添加默认的固定分类
         for choice in ModuleCategory.choices:
+            config = default_categories_config.get(choice[0], {})
             categories.append({
                 'key': choice[0],
                 'label': choice[1],
+                'icon': config.get('icon', 'fas fa-cube'),
+                'color': config.get('color', 'primary'),
+                'order': config.get('order', 0),
                 'is_default': True,
-                'is_deletable': choice[0] != 'other'  # Other分类不可删除
+                'is_deletable': choice[0] != 'other',  # Other分类不可删除
+                'is_selectable': True
             })
         
         # 添加动态分类
@@ -66,11 +86,54 @@ class DynamicModuleCategory(models.Model):
             categories.append({
                 'key': category.key,
                 'label': category.label,
+                'icon': category.icon,
+                'color': category.color,
+                'order': category.order,
                 'is_default': False,
-                'is_deletable': True
+                'is_deletable': True,
+                'is_selectable': category.is_selectable
             })
         
+        # 按排序顺序排列
+        categories.sort(key=lambda x: x['order'])
         return categories
+    
+    def delete_and_migrate_modules(self):
+        """删除分类并将其中的模块迁移到Other分类"""
+        from .models import ModuleItem  # 避免循环导入
+        
+        # 将该分类下的所有模块迁移到 'other' 分类
+        affected_modules = ModuleItem.objects.filter(category=self.key)
+        migrated_count = affected_modules.update(category='other')
+        
+        # 删除分类
+        self.delete()
+        
+        return migrated_count
+    
+    @classmethod 
+    def delete_category_and_migrate(cls, category_key):
+        """删除指定分类并迁移模块"""
+        from .models import ModuleItem  # 避免循环导入
+        
+        if category_key == 'other':
+            raise ValueError("Other分类不能删除")
+        
+        # 检查是否为默认分类
+        default_keys = [choice[0] for choice in ModuleCategory.choices if choice[0] != 'other']
+        
+        if category_key in default_keys:
+            # 删除默认分类：将模块迁移到Other
+            affected_modules = ModuleItem.objects.filter(category=category_key)
+            migrated_count = affected_modules.update(category='other')
+            return migrated_count
+        else:
+            # 删除自定义分类
+            try:
+                category = cls.objects.get(key=category_key)
+                return category.delete_and_migrate_modules()
+            except cls.DoesNotExist:
+                return 0
 
 
 class ModuleFile(models.Model):

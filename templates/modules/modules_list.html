@@ -850,9 +850,10 @@
                         {% for category, info in module_items_by_category.items %}
                         <div class="module-category-section" data-category="{{ category }}">
                             <!-- 分类头部 -->
-                            <div class="category-header category-{{ category }}">
+                            <div class="category-header category-{{ category }}" 
+                                 style="border-left: 4px solid var(--bs-{{ info.color }});">
                                 <div class="category-title">
-                                    {% if category != 'other' %}
+                                    {% if info.is_selectable %}
                                         <input type="checkbox" class="category-checkbox" 
                                                id="category_{{ category }}" 
                                                data-category="{{ category }}"
@@ -860,20 +861,20 @@
                                         <label for="category_{{ category }}" class="category-label">
                                     {% endif %}
                                     <div class="category-info">
-                                        <i class="category-icon fas fa-{% if category == 'attention' %}eye{% elif category == 'convolution' %}filter{% elif category == 'downsample' %}compress-arrows-alt{% elif category == 'fusion' %}code-merge{% elif category == 'head' %}brain{% elif category == 'block' %}cube{% else %}layer-group{% endif %}"></i>
+                                        <i class="category-icon {{ info.icon }} text-{{ info.color }}"></i>
                                         <span class="category-name">{{ info.label }}</span>
-                                        <span class="module-count">{{ info.count }}</span>
+                                        <span class="module-count badge bg-{{ info.color }}">{{ info.count }}</span>
                                     </div>
-                                    {% if category != 'other' %}
+                                    {% if info.is_selectable %}
                                         </label>
                                     {% endif %}
                                 </div>
-                                {% if is_admin and category != 'other' %}
-                                    <button class="delete-category-btn" 
+                                {% if is_admin and info.is_deletable %}
+                                    <button class="delete-category-btn btn btn-sm btn-outline-danger" 
                                             data-category="{{ category }}" 
                                             data-category-label="{{ info.label }}"
                                             title="删除分类">
-                                        <i class="fas fa-times"></i>
+                                        <i class="fas fa-trash"></i>
                                     </button>
                                 {% endif %}
                             </div>
@@ -883,8 +884,8 @@
                                 {% if info.modules %}
                                     {% for module in info.modules %}
                                     <div class="module-card">
-                                        <div class="module-content{% if category != 'other' %} has-checkbox{% else %} no-checkbox{% endif %}">
-                                            {% if category != 'other' %}
+                                        <div class="module-content{% if info.is_selectable %} has-checkbox{% else %} no-checkbox{% endif %}">
+                                            {% if info.is_selectable %}
                                                 <input type="checkbox" class="module-checkbox" 
                                                        data-module-name="{{ module.name }}"
                                                        data-module-category="{{ category }}"
@@ -925,25 +926,34 @@
     <div class="row mb-4">
         <div class="col-12">
             <div class="card border-warning">
-                <div class="card-header bg-warning text-dark">
+                <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
                     <h6 class="mb-0">
                         <i class="fas fa-cog me-2"></i>分类管理（管理员）
                     </h6>
+                    <button class="btn btn-sm btn-outline-dark" id="manageCategoriesBtn">
+                        <i class="fas fa-list-ul me-2"></i>管理分类
+                    </button>
                 </div>
                 <div class="card-body">
                     <div class="row">
-                        <div class="col-md-6">
-                            <div class="input-group">
-                                <input type="text" id="newCategoryKey" class="form-control" 
-                                       placeholder="分类键（如：custom_layer）">
-                                <input type="text" id="newCategoryLabel" class="form-control" 
-                                       placeholder="分类标签（如：Custom Layer）">
-                                <button class="btn btn-success" id="addCategoryBtn">
-                                    <i class="fas fa-plus"></i> 添加分类
-                                </button>
+                        <div class="col-md-8">
+                            <div class="row">
+                                <div class="col-md-4 mb-2">
+                                    <input type="text" id="newCategoryKey" class="form-control" 
+                                           placeholder="分类键（如：custom_layer）">
+                                </div>
+                                <div class="col-md-4 mb-2">
+                                    <input type="text" id="newCategoryLabel" class="form-control" 
+                                           placeholder="分类标签（如：Custom Layer）">
+                                </div>
+                                <div class="col-md-4 mb-2">
+                                    <button class="btn btn-success w-100" id="addCategoryBtn">
+                                        <i class="fas fa-plus"></i> 添加分类
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <textarea id="newCategoryDesc" class="form-control" 
                                       placeholder="分类描述（可选）" rows="2"></textarea>
                         </div>
@@ -1340,6 +1350,113 @@
         </div>
     </div>
 </div>
+
+<!-- 分类管理模态框 -->
+<div class="modal fade" id="categoriesManageModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-list-ul me-2"></i>分类管理
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <!-- 添加新分类表单 -->
+                    <div class="col-12 mb-4">
+                        <div class="card border-success">
+                            <div class="card-header bg-success text-white">
+                                <h6 class="mb-0"><i class="fas fa-plus me-2"></i>添加新分类</h6>
+                            </div>
+                            <div class="card-body">
+                                <form id="addCategoryForm">
+                                    <div class="row">
+                                        <div class="col-md-3 mb-3">
+                                            <label class="form-label">分类键 *</label>
+                                            <input type="text" class="form-control" id="modalCategoryKey" 
+                                                   placeholder="如：custom_layer" required>
+                                        </div>
+                                        <div class="col-md-3 mb-3">
+                                            <label class="form-label">分类标签 *</label>
+                                            <input type="text" class="form-control" id="modalCategoryLabel" 
+                                                   placeholder="如：Custom Layer" required>
+                                        </div>
+                                        <div class="col-md-2 mb-3">
+                                            <label class="form-label">图标</label>
+                                            <input type="text" class="form-control" id="modalCategoryIcon" 
+                                                   placeholder="fas fa-cube" value="fas fa-cube">
+                                        </div>
+                                        <div class="col-md-2 mb-3">
+                                            <label class="form-label">颜色主题</label>
+                                            <select class="form-select" id="modalCategoryColor">
+                                                <option value="primary">主要（蓝）</option>
+                                                <option value="secondary">次要（灰）</option>
+                                                <option value="success">成功（绿）</option>
+                                                <option value="danger">危险（红）</option>
+                                                <option value="warning">警告（黄）</option>
+                                                <option value="info">信息（青）</option>
+                                                <option value="dark">暗色</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-2 mb-3">
+                                            <label class="form-label">排序</label>
+                                            <input type="number" class="form-control" id="modalCategoryOrder" 
+                                                   value="100" min="0">
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-10 mb-3">
+                                            <label class="form-label">分类描述</label>
+                                            <textarea class="form-control" id="modalCategoryDescription" 
+                                                      placeholder="请描述此分类的用途..." rows="2"></textarea>
+                                        </div>
+                                        <div class="col-md-2 mb-3">
+                                            <label class="form-label">设置</label>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" 
+                                                       id="modalCategorySelectable" checked>
+                                                <label class="form-check-label" for="modalCategorySelectable">
+                                                    可选择
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button type="submit" class="btn btn-success">
+                                        <i class="fas fa-plus me-2"></i>添加分类
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 现有分类列表 -->
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="fas fa-list me-2"></i>现有分类</h6>
+                            </div>
+                            <div class="card-body">
+                                <div id="categoriesList">
+                                    <div class="text-center">
+                                        <i class="fas fa-spinner fa-spin"></i> 加载分类列表...
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                <button type="button" class="btn btn-primary" id="refreshCategoriesBtn">
+                    <i class="fas fa-sync me-2"></i>刷新列表
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
@@ -2040,14 +2157,108 @@ function getCookie(name) {
 
 // 新功能：分类管理（管理员）
 {% if is_admin %}
-// 添加新分类
-document.getElementById('addCategoryBtn').addEventListener('click', function() {
-    const key = document.getElementById('newCategoryKey').value.trim();
-    const label = document.getElementById('newCategoryLabel').value.trim();
-    const description = document.getElementById('newCategoryDesc').value.trim();
+let allCategoriesData = [];
+
+// 打开分类管理模态框
+document.getElementById('manageCategoriesBtn').addEventListener('click', function() {
+    const modal = new bootstrap.Modal(document.getElementById('categoriesManageModal'));
+    modal.show();
+    loadCategoriesForManagement();
+});
+
+// 加载分类列表用于管理
+function loadCategoriesForManagement() {
+    fetch('/modules/api/manage-categories/')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                allCategoriesData = data.categories;
+                renderCategoriesList();
+            } else {
+                document.getElementById('categoriesList').innerHTML = 
+                    '<div class="text-danger">加载分类失败: ' + data.error + '</div>';
+            }
+        })
+        .catch(error => {
+            console.error('加载分类错误:', error);
+            document.getElementById('categoriesList').innerHTML = 
+                '<div class="text-danger">加载分类失败: 网络错误</div>';
+        });
+}
+
+// 渲染分类列表
+function renderCategoriesList() {
+    const container = document.getElementById('categoriesList');
+    
+    if (!allCategoriesData || allCategoriesData.length === 0) {
+        container.innerHTML = '<div class="text-muted">暂无分类</div>';
+        return;
+    }
+    
+    let html = '<div class="row">';
+    allCategoriesData.forEach(category => {
+        const isOther = category.key === 'other';
+        const canDelete = category.is_deletable && !isOther;
+        const badge = category.is_default ? 
+            '<span class="badge bg-primary ms-2">默认</span>' : 
+            '<span class="badge bg-success ms-2">自定义</span>';
+        const selectableIcon = category.is_selectable ? 
+            '<i class="fas fa-eye text-success" title="可选择"></i>' : 
+            '<i class="fas fa-eye-slash text-muted" title="不可选择"></i>';
+        
+        html += `
+            <div class="col-lg-6 col-xl-4 mb-3">
+                <div class="card h-100 border-${category.color}">
+                    <div class="card-header bg-${category.color} text-white d-flex justify-content-between align-items-center">
+                        <span>
+                            <i class="${category.icon} me-2"></i>${category.label}
+                            ${badge}
+                        </span>
+                        <div class="btn-group btn-group-sm">
+                            ${selectableIcon}
+                            <button class="btn btn-sm btn-outline-light edit-category-btn" 
+                                    data-category="${category.key}" title="编辑">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            ${canDelete ? `
+                                <button class="btn btn-sm btn-outline-light delete-category-btn" 
+                                        data-category="${category.key}" 
+                                        data-category-label="${category.label}" title="删除">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted small mb-2">${category.description || '无描述'}</p>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-muted">排序: ${category.order}</small>
+                            <small class="text-muted">键: ${category.key}</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    html += '</div>';
+    
+    container.innerHTML = html;
+}
+
+// 添加新分类（从模态框）
+document.getElementById('addCategoryForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const key = document.getElementById('modalCategoryKey').value.trim();
+    const label = document.getElementById('modalCategoryLabel').value.trim();
+    const description = document.getElementById('modalCategoryDescription').value.trim();
+    const icon = document.getElementById('modalCategoryIcon').value.trim() || 'fas fa-cube';
+    const color = document.getElementById('modalCategoryColor').value;
+    const order = parseInt(document.getElementById('modalCategoryOrder').value) || 100;
+    const isSelectable = document.getElementById('modalCategorySelectable').checked;
     
     if (!key || !label) {
-        alert('请填写分类键和标签');
+        showAlert('请填写分类键和标签', 'warning');
         return;
     }
     
@@ -2060,58 +2271,256 @@ document.getElementById('addCategoryBtn').addEventListener('click', function() {
         body: JSON.stringify({
             key: key,
             label: label,
-            description: description
+            description: description,
+            icon: icon,
+            color: color,
+            order: order,
+            is_selectable: isSelectable
         })
     })
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            alert(data.message);
-            location.reload();
+            showAlert(data.message, 'success');
+            document.getElementById('addCategoryForm').reset();
+            document.getElementById('modalCategoryOrder').value = '100';
+            document.getElementById('modalCategorySelectable').checked = true;
+            loadCategoriesForManagement();
         } else {
-            alert('添加分类失败: ' + data.error);
+            showAlert('添加分类失败: ' + data.error, 'danger');
         }
     })
     .catch(error => {
         console.error('添加分类错误:', error);
-        alert('添加分类失败: 网络错误');
+        showAlert('添加分类失败: 网络错误', 'danger');
     });
 });
 
-// 删除分类
+// 快速添加分类（从简化表单）
+document.getElementById('addCategoryBtn').addEventListener('click', function() {
+    const key = document.getElementById('newCategoryKey').value.trim();
+    const label = document.getElementById('newCategoryLabel').value.trim();
+    const description = document.getElementById('newCategoryDesc').value.trim();
+    
+    if (!key || !label) {
+        showAlert('请填写分类键和标签', 'warning');
+        return;
+    }
+    
+    fetch('/modules/api/manage-categories/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({
+            key: key,
+            label: label,
+            description: description,
+            icon: 'fas fa-cube',
+            color: 'primary',
+            order: 100,
+            is_selectable: true
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert(data.message, 'success');
+            document.getElementById('newCategoryKey').value = '';
+            document.getElementById('newCategoryLabel').value = '';
+            document.getElementById('newCategoryDesc').value = '';
+            location.reload(); // 重新加载页面以显示新分类
+        } else {
+            showAlert('添加分类失败: ' + data.error, 'danger');
+        }
+    })
+    .catch(error => {
+        console.error('添加分类错误:', error);
+        showAlert('添加分类失败: 网络错误', 'danger');
+    });
+});
+
+// 刷新分类列表
+document.getElementById('refreshCategoriesBtn').addEventListener('click', function() {
+    loadCategoriesForManagement();
+});
+
+// 编辑和删除分类处理
 document.addEventListener('click', function(e) {
+    // 编辑分类
+    if (e.target.classList.contains('edit-category-btn') || e.target.closest('.edit-category-btn')) {
+        const btn = e.target.classList.contains('edit-category-btn') ? e.target : e.target.closest('.edit-category-btn');
+        const categoryKey = btn.getAttribute('data-category');
+        editCategory(categoryKey);
+    }
+    
+    // 删除分类
     if (e.target.classList.contains('delete-category-btn') || e.target.closest('.delete-category-btn')) {
         const btn = e.target.classList.contains('delete-category-btn') ? e.target : e.target.closest('.delete-category-btn');
         const category = btn.getAttribute('data-category');
         const categoryLabel = btn.getAttribute('data-category-label');
-        
-        if (confirm(`确定要删除分类 "${categoryLabel}" 吗？\n该分类下的所有模块将被移动到 "Other" 分类。`)) {
-            fetch('/modules/api/manage-categories/', {
-                method: 'DELETE',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': getCookie('csrftoken')
-                },
-                body: JSON.stringify({
-                    key: category
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert(data.message);
-                    location.reload();
-                } else {
-                    alert('删除分类失败: ' + data.error);
-                }
-            })
-            .catch(error => {
-                console.error('删除分类错误:', error);
-                alert('删除分类失败: 网络错误');
-            });
-        }
+        deleteCategory(category, categoryLabel);
     }
 });
+
+// 编辑分类函数
+function editCategory(categoryKey) {
+    const category = allCategoriesData.find(cat => cat.key === categoryKey);
+    if (!category) return;
+    
+    // 创建编辑表单模态框
+    const editModal = `
+        <div class="modal fade" id="editCategoryModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">编辑分类: ${category.label}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="editCategoryForm">
+                            <div class="mb-3">
+                                <label class="form-label">分类标签 *</label>
+                                <input type="text" class="form-control" id="editCategoryLabel" 
+                                       value="${category.label}" ${category.is_default ? 'readonly' : ''}>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">图标</label>
+                                <input type="text" class="form-control" id="editCategoryIcon" 
+                                       value="${category.icon}" ${category.is_default ? 'readonly' : ''}>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">颜色主题</label>
+                                <select class="form-select" id="editCategoryColor" ${category.is_default ? 'disabled' : ''}>
+                                    <option value="primary" ${category.color === 'primary' ? 'selected' : ''}>主要（蓝）</option>
+                                    <option value="secondary" ${category.color === 'secondary' ? 'selected' : ''}>次要（灰）</option>
+                                    <option value="success" ${category.color === 'success' ? 'selected' : ''}>成功（绿）</option>
+                                    <option value="danger" ${category.color === 'danger' ? 'selected' : ''}>危险（红）</option>
+                                    <option value="warning" ${category.color === 'warning' ? 'selected' : ''}>警告（黄）</option>
+                                    <option value="info" ${category.color === 'info' ? 'selected' : ''}>信息（青）</option>
+                                    <option value="dark" ${category.color === 'dark' ? 'selected' : ''}>暗色</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">排序</label>
+                                <input type="number" class="form-control" id="editCategoryOrder" 
+                                       value="${category.order}" min="0">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">分类描述</label>
+                                <textarea class="form-control" id="editCategoryDescription" 
+                                          rows="3" ${category.is_default ? 'readonly' : ''}>${category.description || ''}</textarea>
+                            </div>
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" 
+                                           id="editCategorySelectable" ${category.is_selectable ? 'checked' : ''}>
+                                    <label class="form-check-label" for="editCategorySelectable">
+                                        可选择（用户可以将模块分类到此分类）
+                                    </label>
+                                </div>
+                            </div>
+                            <input type="hidden" id="editCategoryKey" value="${category.key}">
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                        <button type="button" class="btn btn-primary" id="saveEditCategory">保存更改</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // 移除现有的编辑模态框并添加新的
+    const existingModal = document.getElementById('editCategoryModal');
+    if (existingModal) existingModal.remove();
+    
+    document.body.insertAdjacentHTML('beforeend', editModal);
+    
+    // 显示模态框
+    const modal = new bootstrap.Modal(document.getElementById('editCategoryModal'));
+    modal.show();
+    
+    // 绑定保存事件
+    document.getElementById('saveEditCategory').addEventListener('click', function() {
+        const key = document.getElementById('editCategoryKey').value;
+        const label = document.getElementById('editCategoryLabel').value.trim();
+        const icon = document.getElementById('editCategoryIcon').value.trim();
+        const color = document.getElementById('editCategoryColor').value;
+        const order = parseInt(document.getElementById('editCategoryOrder').value) || 0;
+        const description = document.getElementById('editCategoryDescription').value.trim();
+        const isSelectable = document.getElementById('editCategorySelectable').checked;
+        
+        const updateData = {
+            key: key,
+            order: order,
+            is_selectable: isSelectable
+        };
+        
+        if (!category.is_default) {
+            updateData.label = label;
+            updateData.icon = icon;
+            updateData.color = color;
+            updateData.description = description;
+        }
+        
+        fetch('/modules/api/manage-categories/', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify(updateData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert(data.message, 'success');
+                modal.hide();
+                loadCategoriesForManagement();
+            } else {
+                showAlert('更新分类失败: ' + data.error, 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('更新分类错误:', error);
+            showAlert('更新分类失败: 网络错误', 'danger');
+        });
+    });
+}
+
+// 删除分类函数
+function deleteCategory(category, categoryLabel) {
+    if (confirm(`确定要删除分类 "${categoryLabel}" 吗？\n该分类下的所有模块将被移动到 "Other" 分类。\n此操作不可撤销。`)) {
+        fetch('/modules/api/manage-categories/', {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify({
+                key: category
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert(data.message, 'success');
+                loadCategoriesForManagement();
+                // 如果当前页面正在显示这个分类，需要重新加载页面
+                setTimeout(() => location.reload(), 2000);
+            } else {
+                showAlert('删除分类失败: ' + data.error, 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('删除分类错误:', error);
+            showAlert('删除分类失败: 网络错误', 'danger');
+        });
+    }
+}
 {% endif %}
 
 // 模块选择功能
