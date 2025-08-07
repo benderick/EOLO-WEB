@@ -736,20 +736,13 @@ class ExperimentProcessManager:
             except (ValueError, IndexError):
                 logger.warning(f"无法解析退出码行: {clean_line}")
         
-        # 简单的日志级别判断和严重错误检测
+        # 简单的日志级别判断（不进行错误检测，只用于显示）
         level = 'INFO'
         line_lower = clean_line.lower()
-        critical_error = False
         
+        # 基本的日志级别分类（仅用于显示，不触发任何错误处理）
         if any(keyword in line_lower for keyword in ['error', 'exception', 'failed', 'fatal']):
             level = 'ERROR'
-            # 检查是否是严重错误，需要立即停止实验
-            if any(keyword in line_lower for keyword in [
-                'out of memory', 'oom', 'cuda out of memory',
-                'cuda error', 'gpu error', 'runtimeerror',
-                'traceback', 'fatal', 'abort'
-            ]):
-                critical_error = True
         elif any(keyword in line_lower for keyword in ['warning', 'warn', 'deprecated']):
             level = 'WARNING'
         elif any(keyword in line_lower for keyword in ['debug', 'verbose']):
@@ -785,22 +778,6 @@ class ExperimentProcessManager:
                 log_entry = self._create_log_entry(exp, level, clean_line)
                 # 如果不是进度条，重置进度条跟踪
                 result = None if not is_progress_line else (log_entry.id if log_entry else None)
-                
-                # 检查是否是严重错误，需要立即标记实验失败
-                if critical_error:
-                    logger.warning(f"检测到严重错误，标记实验 {experiment_id} 为失败: {clean_line}")
-                    try:
-                        if exp.status == 'running':  # 只有运行中的实验才改为失败
-                            exp.fail_experiment(f"训练过程中出现严重错误: {clean_line}")
-                            self._log_to_experiment(exp, 'ERROR', "由于严重错误，实验已自动停止")
-                            
-                            # 尝试停止相关进程
-                            try:
-                                self._kill_all_experiment_processes(experiment_id)
-                            except Exception as kill_e:
-                                logger.error(f"停止错误实验进程失败 (实验 {experiment_id}): {str(kill_e)}")
-                    except Exception as fail_e:
-                        logger.error(f"标记实验失败时出错 (实验 {experiment_id}): {str(fail_e)}")
                 
                 return result
                 
@@ -878,28 +855,26 @@ class ExperimentProcessManager:
                             if final_exit_code == 0:
                                 # 退出码为0，检查日志是否有严重错误
                                 if has_errors:
-                                    # 日志中有错误但退出码为0，需要仔细判断
+                                    # 日志检查方法已经做了精确判断，直接使用其结果
                                     logger.warning(f"退出码为0但日志中检测到错误 (实验 {experiment_id}): {error_message}")
-                                    # 只有严重错误才覆盖退出码判断
-                                    if any(keyword in error_message.lower() for keyword in ['out of memory', 'cuda error', 'traceback', 'exception']):
-                                        exp.fail_experiment(f"训练过程中出现严重错误: {error_message}")
-                                        self._log_to_experiment(exp, 'ERROR', 
-                                            f"训练失败: {error_message} (退出码为0但检测到严重错误)")
-                                    else:
-                                        # 非严重错误，以退出码为准
-                                        exp.complete_experiment()
-                                        self._log_to_experiment(exp, 'INFO', 
-                                            f"实验正常完成 (退出码: {final_exit_code}，忽略非严重日志警告)")
+                                    exp.fail_experiment(f"训练过程中出现错误: {error_message}")
+                                    self._log_to_experiment(exp, 'ERROR', 
+                                        f"训练失败: {error_message} (退出码为0但检测到错误)")
                                 else:
                                     # 退出码为0且无错误：正常完成
                                     exp.complete_experiment()
                                     self._log_to_experiment(exp, 'INFO', 
                                         f"实验正常完成 (实际退出码: {final_exit_code})")
                             else:
-                                # 退出码非0：直接标记为失败
-                                exp.fail_experiment(f"训练进程异常退出，退出码: {final_exit_code}")
+                                # 退出码非0：直接标记为失败，同时考虑日志中的错误信息
+                                failure_message = f"训练进程异常退出，退出码: {final_exit_code}"
+                                if has_errors and error_message:
+                                    failure_message += f" - {error_message}"
+                                
+                                exp.fail_experiment(failure_message)
                                 self._log_to_experiment(exp, 'ERROR', 
-                                    f"实验异常退出 (实际退出码: {final_exit_code})")
+                                    f"实验异常退出 (实际退出码: {final_exit_code})" + 
+                                    (f": {error_message}" if error_message else ""))
                         except Exception as db_e:
                             logger.error(f"更新实验状态失败 (实验 {experiment_id}): {str(db_e)}")
                         
@@ -1094,76 +1069,31 @@ class ExperimentProcessManager:
     def _check_log_for_errors(self, log_file):
         """
         检查日志文件中是否包含错误信息
+        只根据两个标准判断：
+        1. EOLO_EXIT_CODE:非零值
+        2. Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
         返回 (has_errors: bool, error_message: str)
         """
         try:
             with open(log_file, 'r', encoding='utf-8') as f:
                 log_content = f.read()
             
-            # 定义错误关键词和对应的错误消息（使用更精确的正则表达式）
-            error_patterns = [
-                # CUDA/GPU错误
-                (r'(?i)\bout of memory\b|\bOOM\b|\bCUDA out of memory\b', '显存不足'),
-                (r'(?i)\bcuda\b.*\berror\b|\bCUDA\b.*\bERROR\b', 'CUDA错误'),
-                (r'(?i)\bgpu\b.*\berror\b|\bGPU\b.*\bERROR\b', 'GPU错误'),
-                
-                # Python异常（更精确匹配）
-                (r'(?i)^Traceback \(most recent call last\)', 'Python异常'),
-                (r'(?i)\bRuntimeError\b:', '运行时错误'),
-                (r'(?i)\bValueError\b:', '数值错误'),
-                (r'(?i)\bKeyError\b:', '键值错误'),
-                (r'(?i)\bIndexError\b:', '索引错误'),
-                (r'(?i)\bAttributeError\b:', '属性错误'),
-                
-                # 训练相关错误（更精确的匹配）
-                (r'(?i)\bnan\b.*\bloss\b|\bloss\b.*\bnan\b', '损失函数为NaN'),
-                (r'(?i)\binf\b.*\bloss\b|\bloss\b.*\binf\b', '损失函数为无穷大'),
-                (r'(?i)\bloss\b.*=.*\bnan\b|\bloss\b.*:.*\bnan\b', '损失函数为NaN'),
-                (r'(?i)\bloss\b.*=.*\binf\b|\bloss\b.*:.*\binf\b', '损失函数为无穷大'),
-                (r'(?i)training.*failed|failed.*training', '训练失败'),
-                
-                # 一般错误（更精确匹配）
-                (r'(?i)^ERROR:', '一般错误'),
-                (r'(?i)\bFATAL\b:', '严重错误'),
-                (r'(?i)\bException\b:', '异常'),
-                (r'(?i)\bFAILED\b:', '操作失败'),
-                (r'(?i)\bABORT\b:', '操作中止'),
-            ]
+            # 检查1: EOLO_EXIT_CODE（最权威的判断依据）
+            exit_code_match = re.search(r'EOLO_EXIT_CODE:(\d+)', log_content)
+            if exit_code_match:
+                exit_code = int(exit_code_match.group(1))
+                if exit_code != 0:
+                    # 非零退出码表示有错误
+                    return True, f"训练进程异常退出 (退出码: {exit_code})"
+                else:
+                    # 退出码为0表示正常结束
+                    return False, ""
             
-            import re
+            # 检查2: Hydra完整错误信息提示
+            if 'Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.' in log_content:
+                return True, "配置错误，需设置HYDRA_FULL_ERROR=1查看完整堆栈"
             
-            # 检查每个错误模式
-            for pattern, error_type in error_patterns:
-                matches = re.findall(pattern, log_content)
-                if matches:
-                    # 尝试提取更详细的错误信息
-                    lines = log_content.split('\n')
-                    for i, line in enumerate(lines):
-                        if re.search(pattern, line):
-                            # 获取错误行及其前后几行作为上下文
-                            start_line = max(0, i - 2)
-                            end_line = min(len(lines), i + 3)
-                            context_lines = lines[start_line:end_line]
-                            
-                            # 清理ANSI转义序列
-                            ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-                            clean_context = [ansi_escape.sub('', line).strip() for line in context_lines]
-                            clean_context = [line for line in clean_context if line]
-                            
-                            if clean_context:
-                                detailed_message = f"{error_type}: {' | '.join(clean_context[:2])}"
-                                return True, detailed_message
-                    
-                    # 如果没有找到具体上下文，返回一般错误类型
-                    return True, error_type
-            
-            # 额外检查：查看日志的最后几行是否有异常结束的迹象
-            last_lines = log_content.split('\n')[-10:]  # 最后10行
-            last_content = '\n'.join(last_lines).lower()
-            
-            if any(keyword in last_content for keyword in ['error', 'exception', 'failed', 'abort', 'traceback']):
-                return True, "训练过程异常结束"
-            
+            # 如果没有找到这两个错误标识，返回无错误
             return False, ""
             
         except Exception as e:
