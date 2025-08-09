@@ -574,3 +574,67 @@ class ModelFileManager:
 # 全局实例
 model_file_manager = ModelFileManager()
 setting_file_manager = SettingFileManager()
+
+
+class TemplateFileManager(ModelFileManager):
+    """
+    模板文件管理器
+    管理 EOLO/configs/template 目录下的文件和文件夹
+    继承 ModelFileManager 的行为（相同的读/写/权限模型），仅更换 base_path。
+    - common 目录：公共模板，仅可查看
+    - <username> 目录：用户模板，可增删改
+    """
+
+    def __init__(self):
+        # 使用配置化路径：EOLO_MODEL_TEMPLATE_DIR
+        self.base_path = settings.EOLO_MODEL_TEMPLATE_DIR
+        self.common_path = self.base_path / "common"
+
+    def get_user_model_path(self, username: str) -> Path:  # type: ignore[override]
+        """
+        模板的用户专用目录路径（与模型配置同结构）。
+        """
+        return self.base_path / username
+
+    def save_file_content(self, relative_path: str, content: str, username: str) -> tuple[bool, str]:  # type: ignore[override]
+        """
+        保存模板文件内容（覆盖父类实现）：
+        仅允许写入用户自己的目录，禁止写入 common 目录，确保“公共模板只读”。
+
+        参数:
+        - relative_path: 相对路径（相对于模板根目录）
+        - content: 文件内容
+        - username: 当前操作用户
+
+        返回:
+        - (成功与否, 提示信息)
+        """
+        try:
+            file_path = self.base_path / relative_path
+
+            # 安全检查：路径必须位于模板根目录下
+            if not str(file_path.resolve()).startswith(str(self.base_path.resolve())):
+                return False, "无效的文件路径"
+
+            # 权限检查：第一段必须为当前用户名，禁止写入 common
+            parts = Path(relative_path).parts
+            if len(parts) == 0:
+                return False, "无效的文件路径"
+            first_part = parts[0]
+            if first_part != username:
+                return False, "没有权限编辑公共模板或他人目录"
+
+            # 确保目录存在
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # 写入文件
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+
+            return True, "文件保存成功"
+        except Exception as e:
+            return False, f"保存文件时出错: {str(e)}"
+
+
+# 模板管理器全局实例
+template_file_manager = TemplateFileManager()

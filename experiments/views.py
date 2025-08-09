@@ -83,10 +83,6 @@ def experiment_create_view(request):
             experiment.task_type = 'detect'  # 固定为目标检测
             experiment.project_name = request.user.username  # 固定为用户名
             
-            # 设置固定的默认值
-            experiment.image_size = 640  # 固定图像大小为640
-            experiment.workers = 8      # 固定工作进程数为8
-            
             experiment.generate_command()  # 生成命令
             experiment.save()
             messages.success(request, f'实验 "{experiment.name}" 创建成功！')

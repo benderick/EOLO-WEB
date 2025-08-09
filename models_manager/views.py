@@ -14,7 +14,7 @@ from django.views.decorators.http import require_http_methods
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.conf import settings
-from .models import model_file_manager, setting_file_manager
+from .models import model_file_manager, setting_file_manager, template_file_manager
 
 
 @login_required
@@ -69,6 +69,37 @@ class ModelTreeAPIView(View):
 
 
 @method_decorator(login_required, name='dispatch')
+class TemplateTreeAPIView(View):
+    """
+    模板文件树API视图（EOLO/configs/template）
+    """
+    def get(self, request):
+        try:
+            username = request.user.username
+
+            # 确保用户模板目录存在
+            user_path = template_file_manager.ensure_user_folder(username)
+
+            # 获取 common 与 user 模板树
+            common_tree = template_file_manager.get_directory_tree(template_file_manager.common_path)
+            user_tree = template_file_manager.get_directory_tree(user_path)
+
+            return JsonResponse({
+                'success': True,
+                'data': {
+                    'common': common_tree,
+                    'user': user_tree,
+                    'username': username
+                }
+            })
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': f"获取模板文件树失败: {str(e)}"
+            })
+
+
+@method_decorator(login_required, name='dispatch')
 @method_decorator(csrf_exempt, name='dispatch')
 class FileContentAPIView(View):
     """
@@ -87,6 +118,22 @@ class FileContentAPIView(View):
                     'success': False,
                     'error': '文件路径不能为空'
                 })
+
+            # 兼容绝对路径：若为绝对路径且位于模型配置根目录内，则转换为相对路径
+            try:
+                if os.path.isabs(file_path):
+                    rel = os.path.realpath(file_path)
+                    base = str(model_file_manager.base_path.resolve())
+                    if rel.startswith(base):
+                        rel_path = str(
+                            (model_file_manager.base_path.resolve()).joinpath(
+                                os.path.relpath(rel, base)
+                            ).resolve().relative_to(model_file_manager.base_path.resolve())
+                        )
+                        file_path = rel_path
+            except Exception:
+                # 若规范化失败则保留原样，后续读取会返回失败信息
+                pass
             
             content = model_file_manager.get_file_content(file_path)
             
@@ -124,6 +171,21 @@ class FileContentAPIView(View):
                     'success': False,
                     'error': '文件路径不能为空'
                 })
+
+            # 兼容绝对路径写入（仅当位于模型根目录内）
+            try:
+                if os.path.isabs(file_path):
+                    rel = os.path.realpath(file_path)
+                    base = str(model_file_manager.base_path.resolve())
+                    if rel.startswith(base):
+                        rel_path = str(
+                            (model_file_manager.base_path.resolve()).joinpath(
+                                os.path.relpath(rel, base)
+                            ).resolve().relative_to(model_file_manager.base_path.resolve())
+                        )
+                        file_path = rel_path
+            except Exception:
+                pass
             
             success, message = model_file_manager.save_file_content(
                 file_path, content, request.user.username
@@ -139,6 +201,146 @@ class FileContentAPIView(View):
                 'success': False,
                 'error': '请求数据格式错误'
             })
+
+
+@method_decorator(login_required, name='dispatch')
+@method_decorator(csrf_exempt, name='dispatch')
+class TemplateFileContentAPIView(View):
+    """
+    模板文件内容API视图（只读 common，可编辑用户目录）
+    路径相对于 EOLO/configs/template
+    """
+    def get(self, request):
+        try:
+            file_path = request.GET.get('path', '')
+            if not file_path:
+                return JsonResponse({'success': False, 'error': '文件路径不能为空'})
+
+            # 兼容绝对路径：若为绝对路径且位于模板根目录内，则转换为相对路径
+            try:
+                if os.path.isabs(file_path):
+                    rel = os.path.realpath(file_path)
+                    base = str(template_file_manager.base_path.resolve())
+                    if rel.startswith(base):
+                        rel_path = str(
+                            (template_file_manager.base_path.resolve()).joinpath(
+                                os.path.relpath(rel, base)
+                            ).resolve().relative_to(template_file_manager.base_path.resolve())
+                        )
+                        file_path = rel_path
+            except Exception:
+                pass
+
+            content = template_file_manager.get_file_content(file_path)
+            # 兜底：如果不是以 common/ 或 <username>/ 开头，尝试用户目录前缀
+            if content is None and not (str(file_path).startswith('common/') or str(file_path).startswith(request.user.username + '/')):
+                fallback_path = f"{request.user.username}/{file_path}"
+                content = template_file_manager.get_file_content(fallback_path)
+                if content is not None:
+                    file_path = fallback_path
+
+            if content is None:
+                # 追加调试信息，帮助前端定位
+                abs_try = str(template_file_manager.base_path / file_path)
+                return JsonResponse({'success': False, 'error': '文件不存在或无法读取', 'debug': {'tried': abs_try}})
+
+            return JsonResponse({'success': True, 'data': {'content': content, 'path': file_path}})
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': f"读取文件失败: {str(e)}"})
+
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+            file_path = data.get('path', '')
+            content = data.get('content', '')
+            if not file_path:
+                return JsonResponse({'success': False, 'error': '文件路径不能为空'})
+
+            # 兼容绝对路径写入（仅当位于模板根目录内）
+            try:
+                if os.path.isabs(file_path):
+                    rel = os.path.realpath(file_path)
+                    base = str(template_file_manager.base_path.resolve())
+                    if rel.startswith(base):
+                        rel_path = str(
+                            (template_file_manager.base_path.resolve()).joinpath(
+                                os.path.relpath(rel, base)
+                            ).resolve().relative_to(template_file_manager.base_path.resolve())
+                        )
+                        file_path = rel_path
+            except Exception:
+                pass
+
+            success, message = template_file_manager.save_file_content(file_path, content, request.user.username)
+            return JsonResponse({'success': success, 'message': message})
+        except json.JSONDecodeError:
+            return JsonResponse({'success': False, 'error': '请求数据格式错误'})
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': f"保存文件失败: {str(e)}"})
+
+
+@method_decorator(login_required, name='dispatch')
+@method_decorator(csrf_exempt, name='dispatch')
+class TemplateOperationAPIView(View):
+    """
+    模板文件操作API视图（创建文件夹、删除）
+    """
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+            operation = data.get('operation', '')
+
+            if operation == 'create_folder':
+                parent_path = data.get('parent_path', '')
+                folder_name = data.get('folder_name', '')
+                if not folder_name:
+                    return JsonResponse({'success': False, 'error': '文件夹名称不能为空'})
+                success, message = template_file_manager.create_folder(parent_path, folder_name, request.user.username)
+                return JsonResponse({'success': success, 'message': message})
+            elif operation == 'delete':
+                file_path = data.get('path', '')
+                if not file_path:
+                    return JsonResponse({'success': False, 'error': '文件路径不能为空'})
+                success, message = template_file_manager.delete_file(file_path, request.user.username)
+                return JsonResponse({'success': success, 'message': message})
+            else:
+                return JsonResponse({'success': False, 'error': '不支持的操作类型'})
+        except json.JSONDecodeError:
+            return JsonResponse({'success': False, 'error': '请求数据格式错误'})
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': f"操作失败: {str(e)}"})
+
+
+@method_decorator(login_required, name='dispatch')
+@method_decorator(csrf_exempt, name='dispatch')
+class TemplateCreateFileAPIView(View):
+    """
+    模板文件创建API视图
+    """
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+            parent_path = data.get('parent_path', '')
+            file_name = data.get('file_name', '')
+            file_content = data.get('content', '')
+            if not file_name:
+                return JsonResponse({'success': False, 'error': '文件名不能为空'})
+
+            # 构建完整相对路径（与模型配置保持一致约定）
+            if parent_path:
+                full_path = f"{parent_path}/{file_name}"
+            else:
+                full_path = f"{request.user.username}/{file_name}"
+
+            success, message = template_file_manager.save_file_content(full_path, file_content, request.user.username)
+            if success:
+                return JsonResponse({'success': True, 'message': '文件创建成功', 'path': full_path})
+            else:
+                return JsonResponse({'success': False, 'error': message or '文件创建失败'})
+        except json.JSONDecodeError:
+            return JsonResponse({'success': False, 'error': '请求数据格式错误'})
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': f"创建文件失败: {str(e)}"})
         except Exception as e:
             return JsonResponse({
                 'success': False,
@@ -609,8 +811,19 @@ class ModelTestAPIView(View):
             
             # 将相对路径转换为绝对路径
             if not os.path.isabs(model_path):
-                # model_path是相对于模型配置目录的路径，需要转换为绝对路径
-                absolute_model_path = str(model_file_manager.base_path / model_path)
+                # model_path 可能来自模型配置或模板配置
+                candidate_paths = [
+                    model_file_manager.base_path / model_path,
+                    template_file_manager.base_path / model_path,
+                ]
+                absolute_model_path = None
+                for p in candidate_paths:
+                    if os.path.exists(p):
+                        absolute_model_path = str(p)
+                        break
+                if absolute_model_path is None:
+                    # 默认回退到模型配置目录
+                    absolute_model_path = str(model_file_manager.base_path / model_path)
             else:
                 absolute_model_path = model_path
             

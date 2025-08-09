@@ -1154,6 +1154,7 @@ def execute_model_config_api(request):
         # 获取数据
         base_templates = data.get('base_templates', [])
         selected_modules = data.get('selected_modules', {})
+        run_name = data.get('run_name', '')
         
         if not base_templates:
             return JsonResponse({
@@ -1188,6 +1189,11 @@ def execute_model_config_api(request):
             f'user={request.user.username}',
             f'time={current_time}'
         ])
+
+        # 可选：附加运行名称（执行时即带双引号）
+        if isinstance(run_name, str) and run_name.strip():
+            safe_run_name = run_name.replace('"', '\\"')
+            cmd_parts.append(f'run_name="{safe_run_name}"')
         
         # 在EOLO目录中执行命令
         eolo_dir = settings.EOLO_DIR
@@ -1226,7 +1232,7 @@ def execute_model_config_api(request):
             if result.stderr:
                 output += "\n=== STDERR ===\n" + result.stderr
             
-            # 生成的命令字符串
+            # 生成的命令字符串（用于展示）
             command_str = ' '.join(cmd_parts)
             
             return JsonResponse({
@@ -1251,11 +1257,6 @@ def execute_model_config_api(request):
                 'return_code': e.returncode if hasattr(e, 'returncode') else -1
             })
         
-    except json.JSONDecodeError:
-        return JsonResponse({
-            'success': False,
-            'error': '无效的JSON数据'
-        })
     except Exception as e:
         return JsonResponse({
             'success': False,

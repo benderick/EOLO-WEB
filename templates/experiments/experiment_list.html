@@ -19,10 +19,11 @@
                 <select name="status" class="form-control">
                     <option value="">全部状态</option>
                     <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>等待中</option>
+                    <option value="queued" {% if status_filter == 'queued' %}selected{% endif %}>排队中</option>
                     <option value="running" {% if status_filter == 'running' %}selected{% endif %}>运行中</option>
+                    <option value="interrupted" {% if status_filter == 'interrupted' %}selected{% endif %}>已中断</option>
+                    <option value="error" {% if status_filter == 'error' %}selected{% endif %}>错误</option>
                     <option value="completed" {% if status_filter == 'completed' %}selected{% endif %}>已完成</option>
-                    <option value="failed" {% if status_filter == 'failed' %}selected{% endif %}>失败</option>
-                    <option value="cancelled" {% if status_filter == 'cancelled' %}selected{% endif %}>已取消</option>
                 </select>
             </div>
             <div class="col-md-3 d-flex align-items-end">

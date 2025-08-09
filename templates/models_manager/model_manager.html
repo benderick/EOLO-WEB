@@ -614,6 +614,11 @@
             </button>
         </li>
         <li class="nav-item" role="presentation">
+            <button class="nav-link" id="template-tab" data-bs-toggle="tab" data-bs-target="#template-config" type="button" role="tab">
+                <i class="fas fa-clone"></i> 模板配置
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
             <button class="nav-link" id="setting-tab" data-bs-toggle="tab" data-bs-target="#setting-config" type="button" role="tab">
                 <i class="fas fa-cogs"></i> 参数配置
             </button>
@@ -796,7 +801,94 @@
                         
                         <!-- 备用的传统 textarea（向后兼容） -->
                         <textarea id="setting-code-editor" class="code-editor" style="display: none;" placeholder="在这里编辑参数配置内容..."></textarea>
+                    </div> <!-- /.editor-content -->
+                </div> <!-- /.file-editor-panel -->
+            </div> <!-- /.model-manager-container -->
+        </div> <!-- /#setting-config.tab-pane -->
+        
+        <!-- 模板配置选项卡 -->
+        <div class="tab-pane fade" id="template-config" role="tabpanel">
+            <div class="model-manager-container">
+                <!-- 模板文件树面板 -->
+                <div class="file-tree-panel">
+                    <div class="panel-header">
+                        <span><i class="fas fa-folder-tree"></i> 模板配置</span>
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="refreshTemplateTree()">
+                                <i class="fas fa-refresh"></i>
+                            </button>
+                        </div>
                     </div>
+                    <div class="panel-content">
+                        <div id="template-tree-loading" class="loading">
+                            <i class="fas fa-spinner fa-spin"></i> 加载中...
+                            <div id="template-debug-info" style="margin-top: 10px; font-size: 12px; color: #666;"></div>
+                        </div>
+                        <div id="template-tree-content" style="display: none;">
+                            <!-- Common模板目录 -->
+                            <div class="tree-section">
+                                <h4><i class="fas fa-users"></i> 通用模板 (common)</h4>
+                                <ul id="template-common-tree" class="file-tree"></ul>
+                            </div>
+                            
+                            <!-- 用户模板目录 -->
+                            <div class="tree-section">
+                                <h4><i class="fas fa-user"></i> 我的模板</h4>
+                                <ul id="template-user-tree" class="file-tree"></ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 模板编辑器面板 -->
+                <div class="file-editor-panel">
+                    <div class="panel-header">
+                        <span><i class="fas fa-edit"></i> 模板编辑器</span>
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-sm btn-primary" onclick="enterTemplateEditMode()" id="template-edit-btn" style="display: none;">
+                                <i class="fas fa-edit"></i> 编辑
+                            </button>
+                            <button type="button" class="btn btn-sm btn-success" onclick="saveTemplateFile()" id="template-save-btn" style="display: none;">
+                                <i class="fas fa-save"></i> 保存
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="createNewTemplateFile()">
+                                <i class="fas fa-plus"></i> 新建
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="template-editor-header" class="editor-header" style="display: none;">
+                        <span id="template-current-file-path"></span>
+                        <div class="file-info">
+                            <span id="template-file-size"></span>
+                        </div>
+                    </div>
+                    
+                    <div class="editor-content">
+                        <div id="template-editor-placeholder" class="editor-placeholder">
+                            <i class="fas fa-clone"></i>
+                            <h5>选择一个模板文件开始编辑</h5>
+                            <p>在左侧模板树中点击文件可查看和编辑内容</p>
+                        </div>
+                        
+                        <!-- CodeMirror 编辑器容器 - 只读模式 -->
+                        <div id="template-code-editor-readonly" class="code-editor-container readonly-mode" style="display: none;">
+                            <div class="editor-mode-indicator">
+                                <i class="fas fa-eye"></i>
+                                <span>只读模式</span>
+                            </div>
+                        </div>
+                        
+                        <!-- CodeMirror 编辑器容器 - 编辑模式 -->
+                        <div id="template-code-editor-editable" class="code-editor-container edit-mode" style="display: none;">
+                            <div class="editor-mode-indicator">
+                                <i class="fas fa-edit"></i>
+                                <span>编辑模式</span>
+                            </div>
+                        </div>
+                        
+                        <!-- 备用的传统 textarea（向后兼容） -->
+                        <textarea id="template-code-editor" class="code-editor" style="display: none;" placeholder="在这里编辑模板文件内容..."></textarea>
                     </div>
                 </div>
             </div>
@@ -973,6 +1065,41 @@
         </div>
     </div>
 </div>
+
+<!-- 新建模板文件模态框 -->
+<div class="modal fade" id="createTemplateFileModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">新建模板文件</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="createTemplateFileForm">
+                    <div class="mb-3">
+                        <label for="templateFileName" class="form-label">文件名</label>
+                        <input type="text" class="form-control" id="templateFileName" placeholder="例如: my_template.yaml">
+                        <div class="form-text">建议使用 .yaml, .yml, .txt, .md 等扩展名</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="templateParentPath" class="form-label">保存位置</label>
+                        <select class="form-control" id="templateParentPath">
+                            <option value="">根目录</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="templateFileContent" class="form-label">初始内容（可选）</label>
+                        <textarea class="form-control" id="templateFileContent" rows="5" placeholder="模板文件的初始内容..."></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="submitCreateTemplateFile()">创建</button>
+            </div>
+        </div>
+    </div>
+    </div>
 {% endblock %}
 
 {% block extra_js %}
@@ -987,6 +1114,8 @@ let readonlyEditor = null;
 let editableEditor = null;
 let settingReadonlyEditor = null;
 let settingEditableEditor = null;
+let templateReadonlyEditor = null;
+let templateEditableEditor = null;
 
 // 页面加载时初始化
 $(document).ready(function() {
@@ -997,6 +1126,13 @@ $(document).ready(function() {
     initializeCodeMirrorEditors();
     
     loadFileTree();
+    
+    // 切换到模板配置选项卡时，懒加载模板树
+    $('#template-tab').on('shown.bs.tab', function () {
+        if (!templateFileTreeData) {
+            loadTemplateFileTree();
+        }
+    });
     
     // 监听编辑器内容变化 - 只在编辑模式下生效
     $('#code-editor').on('input', function() {
@@ -1135,6 +1271,44 @@ function initializeCodeMirrorEditors() {
             hasUnsavedChanges = true;
         }
     });
+
+    // 模板配置编辑器 - 只读模式
+    templateReadonlyEditor = CodeMirror(document.getElementById('template-code-editor-readonly'), {
+        theme: 'monokai',
+        lineNumbers: true,
+        readOnly: true,
+        cursorBlinkRate: -1,
+        lineWrapping: true,
+        foldGutter: true,
+        gutters: ["CodeMirror-linenumbers", "CodeMirror-foldgutter"],
+    });
+
+    // 模板配置编辑器 - 编辑模式
+    templateEditableEditor = CodeMirror(document.getElementById('template-code-editor-editable'), {
+        theme: 'monokai',
+        lineNumbers: true,
+        readOnly: false,
+        lineWrapping: true,
+        indentUnit: 4,
+        smartIndent: true,
+        electricChars: true,
+        autoCloseBrackets: true,
+        matchBrackets: true,
+        showCursorWhenSelecting: true,
+        foldGutter: true,
+        gutters: ["CodeMirror-linenumbers", "CodeMirror-foldgutter"],
+        extraKeys: {
+            "Ctrl-S": function(cm) { saveTemplateFile(); },
+            "F11": function(cm) { cm.setOption("fullScreen", !cm.getOption("fullScreen")); },
+            "Esc": function(cm) { if (cm.getOption("fullScreen")) cm.setOption("fullScreen", false); }
+        }
+    });
+
+    templateEditableEditor.on('change', function() {
+        if (currentTemplateFile && currentTemplateFile.isEditing) {
+            hasUnsavedTemplateChanges = true;
+        }
+    });
 }
 
 // 获取文件扩展名对应的 CodeMirror 模式
@@ -1162,29 +1336,46 @@ function getCodeMirrorMode(filePath) {
 
 // 切换到只读模式
 function switchToReadonlyMode(isSettingEditor = false) {
-    if (isSettingEditor) {
+    // 先判断模板分支，避免传入字符串 'template' 被当作 truthy 走到参数配置分支
+    if (isSettingEditor === 'template') {
+        $('#template-code-editor-editable').hide();
+        $('#template-code-editor-readonly').show();
+        if (templateReadonlyEditor) templateReadonlyEditor.refresh();
+    } else if (isSettingEditor) {
         $('#setting-code-editor-editable').hide();
         $('#setting-code-editor-readonly').show();
-        settingReadonlyEditor.refresh();
+        if (settingReadonlyEditor) settingReadonlyEditor.refresh();
     } else {
         $('#code-editor-editable').hide();
         $('#code-editor-readonly').show();
-        readonlyEditor.refresh();
+        if (readonlyEditor) readonlyEditor.refresh();
     }
 }
 
 // 切换到编辑模式
 function switchToEditMode(isSettingEditor = false) {
-    if (isSettingEditor) {
+    // 先判断模板分支，避免 'template' 被当作 truthy 误入参数配置分支
+    if (isSettingEditor === 'template') {
+        $('#template-code-editor-readonly').hide();
+        $('#template-code-editor-editable').show();
+        if (templateEditableEditor) {
+            templateEditableEditor.refresh();
+            templateEditableEditor.focus();
+        }
+    } else if (isSettingEditor) {
         $('#setting-code-editor-readonly').hide();
         $('#setting-code-editor-editable').show();
-        settingEditableEditor.refresh();
-        settingEditableEditor.focus();
+        if (settingEditableEditor) {
+            settingEditableEditor.refresh();
+            settingEditableEditor.focus();
+        }
     } else {
         $('#code-editor-readonly').hide();
         $('#code-editor-editable').show();
-        editableEditor.refresh();
-        editableEditor.focus();
+        if (editableEditor) {
+            editableEditor.refresh();
+            editableEditor.focus();
+        }
     }
 }
 
@@ -1299,8 +1490,8 @@ function formatFileSize(bytes) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
-// 绑定树节点点击事件
-$(document).on('click', '.tree-node:not([data-type="setting"])', function(e) {
+// 绑定树节点点击事件（仅模型树：没有 data-type 属性的节点）
+$(document).on('click', '.tree-node:not([data-type])', function(e) {
     e.stopPropagation();
     
     const path = $(this).data('path');
@@ -1316,8 +1507,8 @@ $(document).on('click', '.tree-node:not([data-type="setting"])', function(e) {
     }
 });
 
-// 绑定右键菜单事件
-$(document).on('contextmenu', '.tree-node:not([data-type="setting"])', function(e) {
+// 绑定右键菜单事件（仅模型树：没有 data-type 属性的节点）
+$(document).on('contextmenu', '.tree-node:not([data-type])', function(e) {
     e.preventDefault();
     e.stopPropagation();
     
@@ -1327,6 +1518,10 @@ $(document).on('contextmenu', '.tree-node:not([data-type="setting"])', function(
     
     // 清空参数配置的上下文菜单目标
     settingContextMenuTarget = null;
+    // 清空模板配置的上下文菜单目标
+    templateContextMenuTarget = null;
+    // 清空模板配置的上下文菜单目标
+    templateContextMenuTarget = null;
     
     contextMenuTarget = {
         path: path,
@@ -1578,6 +1773,8 @@ function openFile() {
         loadFile(contextMenuTarget.path, contextMenuTarget.canEdit);
     } else if (settingContextMenuTarget && settingContextMenuTarget.isFile) {
         loadSettingFile(settingContextMenuTarget.path, settingContextMenuTarget.canEdit);
+    } else if (templateContextMenuTarget && templateContextMenuTarget.isFile) {
+        loadTemplateFile(templateContextMenuTarget.path, templateContextMenuTarget.canEdit);
     }
     $('#context-menu').hide();
 }
@@ -1587,13 +1784,17 @@ function editFile() {
         loadFile(contextMenuTarget.path, true);
     } else if (settingContextMenuTarget && settingContextMenuTarget.isFile && settingContextMenuTarget.canEdit) {
         loadSettingFile(settingContextMenuTarget.path, true);
+    } else if (templateContextMenuTarget && templateContextMenuTarget.isFile && templateContextMenuTarget.canEdit) {
+        loadTemplateFile(templateContextMenuTarget.path, true);
     }
     $('#context-menu').hide();
 }
 
 function deleteFile() {
-    let target = contextMenuTarget || settingContextMenuTarget;
-    let isSettingContext = !!settingContextMenuTarget;
+    let target = contextMenuTarget || settingContextMenuTarget || templateContextMenuTarget;
+    let ctx = 'model';
+    if (settingContextMenuTarget) ctx = 'setting';
+    if (templateContextMenuTarget) ctx = 'template';
     
     if (!target || !target.canEdit) {
         showError('没有删除权限');
@@ -1604,10 +1805,21 @@ function deleteFile() {
         return;
     }
     
-    let apiUrl = isSettingContext ? '/models/api/settings/operation/' : '/models/api/operation/';
-    let reloadFunction = isSettingContext ? loadSettingFileTree : loadFileTree;
-    let currentFileObj = isSettingContext ? currentSettingFile : currentFile;
-    let clearFunction = isSettingContext ? clearSettingEditor : clearEditor;
+    let apiUrl = '/models/api/operation/';
+    let reloadFunction = loadFileTree;
+    let currentFileObj = currentFile;
+    let clearFunction = clearEditor;
+    if (ctx === 'setting') {
+        apiUrl = '/models/api/settings/operation/';
+        reloadFunction = loadSettingFileTree;
+        currentFileObj = currentSettingFile;
+        clearFunction = clearSettingEditor;
+    } else if (ctx === 'template') {
+        apiUrl = '/models/api/templates/operation/';
+        reloadFunction = loadTemplateFileTree;
+        currentFileObj = currentTemplateFile;
+        clearFunction = clearTemplateEditor;
+    }
     
     $.ajax({
         url: apiUrl,
@@ -1625,8 +1837,12 @@ function deleteFile() {
         if (response.success) {
             showSuccess(response.message);
             
-            // 局部更新：移除被删除的文件/文件夹节点
-            removeFileTreeNode(target.path, isSettingContext);
+            // 局部更新：移除被删除的文件/文件夹节点（模板上下文直接刷新树以简化处理）
+            if (ctx === 'template') {
+                reloadFunction();
+            } else {
+                removeFileTreeNode(target.path, ctx === 'setting');
+            }
             
             // 如果删除的是当前打开的文件，清空编辑器
             if (currentFileObj && currentFileObj.path === target.path) {
@@ -1800,8 +2016,10 @@ function addFileTreeNode(parentPath, nodeName, isFile, isSettingContext) {
 }
 
 function createFolderDialog() {
-    let target = contextMenuTarget || settingContextMenuTarget;
-    let isSettingContext = !!settingContextMenuTarget;
+    let target = contextMenuTarget || settingContextMenuTarget || templateContextMenuTarget;
+    let ctx = 'model';
+    if (settingContextMenuTarget) ctx = 'setting';
+    if (templateContextMenuTarget) ctx = 'template';
     
     if (!target || !target.canEdit) {
         showError('没有创建权限');
@@ -1816,13 +2034,19 @@ function createFolderDialog() {
         parentPath = pathParts.join('/');
     }
     
-    if (isSettingContext) {
+    if (ctx === 'setting') {
         $('#settingFolderLocation').text(parentPath || '根目录');
         $('#createSettingFolderModal').data('parent-path', parentPath);
         $('#createSettingFolderModal').modal('show');
+    } else if (ctx === 'template') {
+        $('#folderLocation').text(parentPath || '根目录');
+        $('#createFolderModal').data('parent-path', parentPath);
+        $('#createFolderModal').data('context', 'template');
+        $('#createFolderModal').modal('show');
     } else {
         $('#folderLocation').text(parentPath || '根目录');
         $('#createFolderModal').data('parent-path', parentPath);
+        $('#createFolderModal').data('context', 'model');
         $('#createFolderModal').modal('show');
     }
     $('#context-menu').hide();
@@ -1831,14 +2055,16 @@ function createFolderDialog() {
 function submitCreateFolder() {
     const folderName = $('#folderName').val().trim();
     const parentPath = $('#createFolderModal').data('parent-path') || '';
+    const contextType = $('#createFolderModal').data('context') || 'model';
     
     if (!folderName) {
         showError('请输入文件夹名称');
         return;
     }
     
+    const apiUrl = contextType === 'template' ? '/models/api/templates/operation/' : '/models/api/operation/';
     $.ajax({
-        url: '/models/api/operation/',
+        url: apiUrl,
         method: 'POST',
         data: JSON.stringify({
             operation: 'create_folder',
@@ -1856,8 +2082,12 @@ function submitCreateFolder() {
             $('#createFolderModal').modal('hide');
             $('#createFolderForm')[0].reset();
             
-            // 局部更新：添加新创建的文件夹节点
-            addFileTreeNode(parentPath, folderName, false, false); // false = 文件夹, false = 设置文件树上下文
+            // 局部更新：添加新创建的文件夹节点（模板上下文直接刷新树）
+            if (contextType === 'template') {
+                loadTemplateFileTree();
+            } else {
+                addFileTreeNode(parentPath, folderName, false, false); // false = 文件夹, false = 设置文件树上下文
+            }
         } else {
             showError('创建失败: ' + response.message);
         }
@@ -2380,6 +2610,251 @@ $(document).ready(function() {
         }
     });
 });
+
+// ========== 模板配置相关功能 ==========
+let currentTemplateFile = null;
+let templateContextMenuTarget = null;
+let templateFileTreeData = null;
+let hasUnsavedTemplateChanges = false;
+
+// 加载模板文件树
+function loadTemplateFileTree() {
+    console.log('开始加载模板文件树...');
+    $('#template-debug-info').text('正在请求API...');
+    $('#template-tree-loading').show();
+    $('#template-tree-content').hide();
+    
+    $.get('/models/api/templates/tree/')
+        .done(function(response) {
+            $('#template-debug-info').text('API响应成功');
+            if (response.success) {
+                templateFileTreeData = response.data;
+                renderTemplateFileTree();
+                $('#template-tree-loading').hide();
+                $('#template-tree-content').show();
+            } else {
+                $('#template-debug-info').text('API返回错误: ' + response.error);
+                $('#template-tree-loading').html('<div class="error-message">加载失败: ' + response.error + '</div>');
+            }
+        })
+        .fail(function(xhr) {
+            $('#template-debug-info').text('请求失败，状态码: ' + xhr.status);
+            $('#template-tree-loading').html('<div class="error-message">网络错误<br><button class="btn btn-sm btn-primary mt-2" onclick="loadTemplateFileTree()">重试</button></div>');
+        });
+}
+
+// 渲染模板文件树
+function renderTemplateFileTree() {
+    if (!templateFileTreeData) return;
+    $('#template-common-tree').html(renderTemplateTreeNode(templateFileTreeData.common, 'common'));
+    $('#template-user-tree').html(renderTemplateTreeNode(templateFileTreeData.user, templateFileTreeData.username));
+}
+
+// 渲染模板树节点
+function renderTemplateTreeNode(node, rootType) {
+    if (!node || !node.children) return '';
+    let html = '';
+    node.children.forEach(function(child) {
+        const isFile = child.is_file;
+        const icon = isFile ? 'fas fa-file' : 'fas fa-folder';
+        const cssClass = isFile ? 'file' : 'folder';
+        const canEdit = rootType !== 'common' || false; // common 模板只读
+        const hasChildren = !isFile && child.children && child.children.length > 0;
+        html += `<li class="tree-item">
+            <div class="tree-node ${cssClass} ${hasChildren ? 'collapsed' : ''}" data-path="${child.path}" data-is-file="${isFile}" data-can-edit="${canEdit}" data-type="template">`;
+        if (!isFile && hasChildren) {
+            html += `<i class="folder-toggle collapsed fas fa-chevron-right" onclick="toggleFolder(event, this)"></i>`;
+        } else if (!isFile) {
+            html += `<span class="folder-toggle" style="width: 16px;"></span>`;
+        }
+        html += `<i class="${icon} folder-icon"></i>
+                <span>${child.name}</span>
+                ${isFile ? `<span class="file-info">${formatFileSize(child.size)}</span>` : ''}
+            </div>`;
+        if (hasChildren) {
+            html += `<ul class="tree-children" style="display: none;">${renderTemplateTreeNode(child, rootType)}</ul>`;
+        }
+        html += '</li>';
+    });
+    return html;
+}
+
+// 模板树点击
+$(document).on('click', '.tree-node[data-type="template"]', function(e) {
+    e.stopPropagation();
+    const path = $(this).data('path');
+    const isFile = $(this).data('is-file');
+    const canEdit = $(this).data('can-edit');
+    $('.tree-node[data-type="template"]').removeClass('active');
+    $(this).addClass('active');
+    if (isFile) {
+        loadTemplateFile(path, canEdit);
+    }
+});
+
+// 模板右键菜单
+$(document).on('contextmenu', '.tree-node[data-type="template"]', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const path = $(this).data('path');
+    const isFile = $(this).data('is-file');
+    const canEdit = $(this).data('can-edit');
+    // 清空其它上下文
+    contextMenuTarget = null;
+    settingContextMenuTarget = null;
+    templateContextMenuTarget = { path, isFile, canEdit, element: $(this) };
+    const menu = $('#context-menu');
+    menu.css({ left: e.pageX + 'px', top: e.pageY + 'px', display: 'block' });
+    menu.find('.context-menu-item').show();
+    if (!canEdit) {
+        menu.find('.context-menu-item').eq(1).hide();
+        menu.find('.context-menu-item').eq(2).hide();
+        menu.find('.context-menu-item').eq(3).hide();
+    }
+});
+
+// 加载模板文件
+function loadTemplateFile(path, canEdit = false) {
+    if (hasUnsavedTemplateChanges) {
+        if (!confirm('有未保存的更改，确定要切换文件吗？')) return;
+    }
+    $.get('/models/api/templates/file/', { path })
+        .done(function(response) {
+            if (response.success) {
+                // 优先采用后端返回的标准化路径，避免路径前缀差异
+                const normalizedPath = (response.data && response.data.path) ? response.data.path : path;
+                currentTemplateFile = { path: normalizedPath, canEdit, originalContent: response.data.content, isEditing: false };
+                $('#template-editor-placeholder').hide();
+                $('#template-code-editor').hide();
+                const mode = getCodeMirrorMode(normalizedPath);
+                templateReadonlyEditor.setOption('mode', mode);
+                templateEditableEditor.setOption('mode', mode);
+                templateReadonlyEditor.setValue(response.data.content);
+                templateEditableEditor.setValue(response.data.content);
+                switchToReadonlyMode('template');
+                $('#template-editor-header').show();
+                $('#template-current-file-path').text(normalizedPath);
+                $('#template-save-btn').hide();
+                if (canEdit) { $('#template-edit-btn').show(); } else { $('#template-edit-btn').hide(); }
+                hasUnsavedTemplateChanges = false;
+            } else {
+                showError('加载模板文件失败: ' + response.error);
+            }
+        })
+        .fail(function() { showError('网络错误，无法加载模板文件'); });
+}
+
+// 模板进入编辑
+function enterTemplateEditMode() {
+    if (!currentTemplateFile || !currentTemplateFile.canEdit) { showError('当前模板文件无法编辑'); return; }
+    currentTemplateFile.isEditing = true;
+    switchToEditMode('template');
+    $('#template-edit-btn').hide();
+    $('#template-save-btn').show();
+}
+
+// 保存模板文件
+function saveTemplateFile() {
+    if (!currentTemplateFile || !currentTemplateFile.canEdit) { showError('当前模板文件无法编辑'); return; }
+    const content = templateEditableEditor.getValue();
+    $.ajax({
+        url: '/models/api/templates/file/',
+        method: 'POST',
+        data: JSON.stringify({ path: currentTemplateFile.path, content }),
+        contentType: 'application/json',
+        headers: { 'X-CSRFToken': getCookie('csrftoken') }
+    })
+    .done(function(response) {
+        if (response.success) {
+            showSuccess(response.message);
+            hasUnsavedTemplateChanges = false;
+            currentTemplateFile.originalContent = content;
+            currentTemplateFile.isEditing = false;
+            templateReadonlyEditor.setValue(content);
+            switchToReadonlyMode('template');
+            $('#template-save-btn').hide();
+            $('#template-edit-btn').show();
+        } else {
+            showError('保存失败: ' + (response.error || '未知错误'));
+        }
+    })
+    .fail(function() { showError('网络错误，无法保存模板文件'); });
+}
+
+// 刷新模板文件树
+function refreshTemplateTree() { loadTemplateFileTree(); }
+
+// 新建模板文件
+function createNewTemplateFile() {
+    populateTemplateParentPathOptions();
+    $('#createTemplateFileModal').modal('show');
+}
+
+// 填充模板父路径选项
+function populateTemplateParentPathOptions() {
+    const select = $('#templateParentPath');
+    select.html('<option value="">根目录</option>');
+    if (templateFileTreeData && templateFileTreeData.username) {
+        const username = templateFileTreeData.username;
+        select.append(`<option value="${username}">我的模板 (${username})</option>`);
+        if (templateFileTreeData.user && templateFileTreeData.user.children) {
+            addTemplateFolderOptions(templateFileTreeData.user.children, username, select);
+        }
+    }
+}
+
+function addTemplateFolderOptions(nodes, parentPath, select) {
+    nodes.forEach(function(node) {
+        if (!node.is_file) {
+            const fullPath = parentPath + '/' + node.name;
+            select.append(`<option value="${fullPath}">${fullPath}</option>`);
+            if (node.children) { addTemplateFolderOptions(node.children, fullPath, select); }
+        }
+    });
+}
+
+// 提交创建模板文件
+function submitCreateTemplateFile() {
+    const fileName = $('#templateFileName').val().trim();
+    const parentPath = $('#templateParentPath').val();
+    const content = $('#templateFileContent').val();
+    if (!fileName) { showError('请输入文件名'); return; }
+    $.ajax({
+        url: '/models/api/templates/create/',
+        method: 'POST',
+        data: JSON.stringify({ parent_path: parentPath, file_name: fileName, content }),
+        contentType: 'application/json',
+        headers: { 'X-CSRFToken': getCookie('csrftoken') }
+    })
+    .done(function(response) {
+        if (response.success) {
+            showSuccess(response.message);
+            $('#createTemplateFileModal').modal('hide');
+            $('#createTemplateFileForm')[0].reset();
+            loadTemplateFileTree();
+            setTimeout(() => { loadTemplateFile(response.path, true); }, 500);
+        } else {
+            showError('创建失败: ' + (response.error || response.message));
+        }
+    })
+    .fail(function() { showError('网络错误，无法创建模板文件'); });
+}
+
+// 模板清空编辑器
+function clearTemplateEditor() {
+    currentTemplateFile = null;
+    hasUnsavedTemplateChanges = false;
+    $('#template-code-editor-readonly').hide();
+    $('#template-code-editor-editable').hide();
+    $('#template-code-editor').hide().val('');
+    $('#template-editor-placeholder').show();
+    $('#template-editor-header').hide();
+    $('#template-save-btn').hide();
+    $('#template-edit-btn').hide();
+    $('.tree-node[data-type="template"]').removeClass('active');
+}
+
+// 模板管理不提供“测试”功能，测试能力仅保留在“模型配置”选项卡
 
 // 获取CSRF Token
 function getCookie(name) {

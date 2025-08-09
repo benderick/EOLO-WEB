@@ -181,12 +181,6 @@ class Dataset:
         return self._resolve_dataset_path(val_value)
     
     @property
-    def val(self):
-        """获取val路径 - 转换为绝对路径"""
-        val_value = self.data.get('val', '')
-        return self._resolve_dataset_path(val_value)
-    
-    @property
     def test(self):
         """获取test路径 - 转换为绝对路径"""
         test_value = self.data.get('test', '')

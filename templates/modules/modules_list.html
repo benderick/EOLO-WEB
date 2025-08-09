@@ -11,6 +11,30 @@
     font-size: 14px;
 }
 
+/* Base 模板树简易样式 */
+.base-template-tree .bt-node {
+    padding: 4px 8px;
+    margin: 2px 0;
+    cursor: pointer;
+    border-radius: 4px;
+}
+.base-template-tree .bt-node:hover {
+    background: #f8f9fa;
+}
+.base-template-tree .bt-node.selected {
+    background: #e3f2fd;
+    color: #1976d2;
+}
+.base-template-tree .toggle {
+    margin-right: 6px;
+    color: #888;
+}
+.base-template-tree .bt-children {
+    margin-left: 14px;
+    padding-left: 8px;
+    border-left: 1px dashed #e0e0e0;
+}
+
 .tree-item {
     padding: 4px 8px;
     margin: 2px 0;
@@ -976,10 +1000,16 @@
                 <div class="card-body">
                     <div class="row">
                         <div class="col-md-6">
-                            <label class="form-label">选择Base模板（多选）：</label>
-                            <div id="baseTemplatesContainer" class="border rounded p-3" style="max-height: 200px; overflow-y: auto;">
-                                <div class="text-center text-muted">
-                                    <i class="fas fa-spinner fa-spin"></i> 加载中...
+                            <label class="form-label">选择基线模板：</label>
+                            <!-- 基于模板目录(common + 用户目录)的文件树，多选文件作为 Base 模板 -->
+                            <div id="baseTemplatesContainer" class="border rounded p-3" style="max-height: 260px; overflow-y: auto;">
+                                <!-- <div class="text-muted mb-2" style="font-size: 12px;">
+                                    提示：点击文件进行选择/取消（支持多选，仅显示 YAML 模板）；目录可展开/收起。
+                                </div> -->
+                                <div id="baseTemplateTree" class="base-template-tree">
+                                    <div class="text-center text-muted">
+                                        <i class="fas fa-spinner fa-spin"></i> 加载中...
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -988,6 +1018,14 @@
                             <div id="selectedModulesDisplay" class="border rounded p-3" style="max-height: 200px; overflow-y: auto;">
                                 <div class="text-muted">请从左侧选择模块</div>
                             </div>
+                        </div>
+                    </div>
+                    <!-- 运行名称（可选） -->
+                    <div class="row mt-2">
+                        <div class="col-md-6">
+                            <label for="runNameInput" class="form-label">运行名称 (run_name)：<small class="text-muted">可选</small></label>
+                            <input type="text" id="runNameInput" class="form-control" placeholder="例如：exp-2025-08-09">
+                            <div class="form-text">若填写，将以参数 run_name="..." 附加到命令</div>
                         </div>
                     </div>
                     <div class="row mt-3">
@@ -2616,63 +2654,118 @@ function updateSelectedModulesDisplay() {
 // Base模板加载和选择
 let selectedBases = [];
 
-// 页面加载时获取base模板
+// 页面加载时获取模板树（来自 /models/api/templates/tree/）
 document.addEventListener('DOMContentLoaded', function() {
-    loadBaseTemplates();
+    loadBaseTemplateTree();
 });
 
-function loadBaseTemplates() {
-    fetch('/modules/api/base-templates/', {
-        method: 'GET',
-        headers: {
-            'Content-Type': 'application/json'
-        }
-    })
-    .then(response => response.json())
-    .then(data => {
-        const container = document.getElementById('baseTemplatesContainer');
-        
-        if (data.success) {
-            if (data.base_templates.length > 0) {
-                let html = '';
-                data.base_templates.forEach(template => {
-                    html += `
-                        <div class="form-check">
-                            <input class="form-check-input base-template-checkbox" type="checkbox" 
-                                   value="${template.name}" id="base_${template.name}">
-                            <label class="form-check-label" for="base_${template.name}">
-                                ${template.name}
-                            </label>
-                        </div>
-                    `;
-                });
-                container.innerHTML = html;
-                
-                // 添加base模板选择事件
-                container.addEventListener('change', function(e) {
-                    if (e.target.classList.contains('base-template-checkbox')) {
-                        const baseName = e.target.value;
-                        if (e.target.checked) {
-                            if (!selectedBases.includes(baseName)) {
-                                selectedBases.push(baseName);
-                            }
-                        } else {
-                            selectedBases = selectedBases.filter(b => b !== baseName);
-                        }
-                    }
-                });
-            } else {
-                container.innerHTML = '<div class="text-muted">未找到base模板</div>';
+// 渲染树的工具函数：仅展示目录与 .yaml/.yml 文件
+function renderBaseTemplateTreeNode(node) {
+    if (!node || !node.name) return '';
+    const isFile = !!node.is_file;
+    const children = Array.isArray(node.children) ? node.children : [];
+    const isYaml = isFile && (node.name.endsWith('.yaml') || node.name.endsWith('.yml'));
+    const displayName = node.name;
+    const nodePath = node.path || '';
+
+    if (isFile) {
+        if (!isYaml) return '';
+    // 选中状态（改为使用相对路径，不含后缀，如：common/yolo11-4Head 或 username/rtdetr）
+    const relPathNoExt = (nodePath || '').replace(/\.(yaml|yml)$/i, '');
+    const selected = selectedBases.includes(relPathNoExt) ? 'selected' : '';
+    return `<div class="bt-node bt-file ${selected}" data-path="${nodePath}" data-relpath="${relPathNoExt}" data-name="${displayName}"><i class="far fa-file me-2"></i>${displayName}</div>`;
+    }
+    // 目录节点
+    const hasChildren = children && children.length > 0;
+    const childrenHTML = (children || []).map(renderBaseTemplateTreeNode).join('');
+    const caret = hasChildren ? '<i class="fas fa-caret-right toggle"></i>' : '<i class="fas fa-caret-right toggle" style="visibility:hidden"></i>';
+    return `
+      <div class="bt-node bt-dir" data-path="${nodePath}">${caret}<i class="far fa-folder me-2"></i>${displayName}</div>
+      <div class="bt-children" style="display:none;">${childrenHTML}</div>
+    `;
+}
+
+function bindBaseTemplateTreeEvents(rootEl) {
+    // 目录展开/收起
+    rootEl.addEventListener('click', function(e) {
+        const dirNode = e.target.closest('.bt-dir');
+        if (dirNode && rootEl.contains(dirNode)) {
+            const caret = dirNode.querySelector('.toggle');
+            const next = dirNode.nextElementSibling;
+            if (next && next.classList.contains('bt-children')) {
+                const show = next.style.display === 'none';
+                next.style.display = show ? 'block' : 'none';
+                if (caret) caret.classList.toggle('fa-caret-right');
+                if (caret) caret.classList.toggle('fa-caret-down');
             }
-        } else {
-            container.innerHTML = `<div class="text-danger">加载失败: ${data.error}</div>`;
         }
-    })
-    .catch(error => {
-        console.error('加载base模板错误:', error);
-        document.getElementById('baseTemplatesContainer').innerHTML = 
-            '<div class="text-danger">加载失败: 网络错误</div>';
     });
+
+    // 文件多选
+    rootEl.addEventListener('click', function(e) {
+        const fileNode = e.target.closest('.bt-file');
+        if (fileNode && rootEl.contains(fileNode)) {
+            // 基于相对路径去掉后缀，携带根目录（common/ 或 <username>/）
+            const relPathNoExt = fileNode.getAttribute('data-relpath')
+                                  || (fileNode.getAttribute('data-path') || '').replace(/\.(yaml|yml)$/i, '');
+            if (fileNode.classList.contains('selected')) {
+                fileNode.classList.remove('selected');
+                selectedBases = selectedBases.filter(n => n !== relPathNoExt);
+            } else {
+                fileNode.classList.add('selected');
+                if (!selectedBases.includes(relPathNoExt)) selectedBases.push(relPathNoExt);
+            }
+            refreshSelectedBaseDisplay();
+        }
+    });
+}
+
+function refreshSelectedBaseDisplay() {
+    // 可在“已选择的模块”区域旁边简单展示已选 Base 模板名称，避免混淆
+    const container = document.getElementById('selectedModulesDisplay');
+    if (!container) return;
+    const existing = container.querySelector('#selectedBaseTemplatesBadges');
+    if (existing) existing.remove();
+    const wrap = document.createElement('div');
+    wrap.id = 'selectedBaseTemplatesBadges';
+    wrap.className = 'mt-2';
+        wrap.innerHTML = selectedBases.length
+                ? `<div class="mb-1"><strong class="text-success">Base 模板 (${selectedBases.length})</strong></div>` +
+                    `<div>${selectedBases.map(p => `<span class='badge bg-success me-1'>${p}</span>`).join('')}</div>`
+                : `<div class='text-muted'>未选择 Base 模板</div>`;
+    container.appendChild(wrap);
+}
+
+function loadBaseTemplateTree() {
+    fetch('/models/api/templates/tree/', { method: 'GET' })
+        .then(r => r.json())
+        .then(data => {
+            const treeEl = document.getElementById('baseTemplateTree');
+            if (!treeEl) return;
+            if (!data.success) {
+                treeEl.innerHTML = `<div class="text-danger">加载失败: ${data.error || '未知错误'}</div>`;
+                return;
+            }
+            const d = data.data || {};
+            const common = d.common || {};
+            const user = d.user || {};
+            const username = d.username || 'user';
+
+            // 渲染两个根：common 与 <username>
+            const html = `
+                <div class="mb-1 text-muted" style="font-size:12px;">通用模板（common）</div>
+                <div class="mb-2">${renderBaseTemplateTreeNode(common)}</div>
+                <div class="mb-1 text-muted" style="font-size:12px;">我的模板（${username}）</div>
+                <div>${renderBaseTemplateTreeNode(user)}</div>
+            `;
+            treeEl.innerHTML = html;
+            bindBaseTemplateTreeEvents(treeEl);
+            refreshSelectedBaseDisplay();
+        })
+        .catch(err => {
+            const treeEl = document.getElementById('baseTemplateTree');
+            if (treeEl) treeEl.innerHTML = `<div class="text-danger">加载失败: 网络错误</div>`;
+        });
 }
 
 // 生成模型配置并执行命令
@@ -2703,16 +2796,25 @@ document.getElementById('generateConfigBtn').addEventListener('click', function(
         selectedModulesData[category].push(module.name);
     });
     
+    // 读取可选的运行名称
+    const runNameInput = document.getElementById('runNameInput');
+    const runName = runNameInput ? runNameInput.value.trim() : '';
+
     fetch('/modules/api/execute-config/', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             'X-CSRFToken': getCookie('csrftoken')
         },
-        body: JSON.stringify({
-            base_templates: selectedBases,
-            selected_modules: selectedModulesData
-        })
+        body: JSON.stringify((() => {
+            // 动态构造请求体，run_name 非空才发送
+            const payload = {
+                base_templates: selectedBases,
+                selected_modules: selectedModulesData
+            };
+            if (runName) payload.run_name = runName;
+            return payload;
+        })())
     })
     .then(response => response.json())
     .then(data => {
