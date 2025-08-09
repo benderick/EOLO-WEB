@@ -1500,8 +1500,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         e.target : e.target.closest('.edit-module-btn');
             const filePath = btn.getAttribute('data-file-path');
             if (filePath) {
-                const encodedPath = filePath.replace(/\//g, '__');
-                window.location.href = `/modules/edit/${encodedPath}/`;
+                // 在新标签页中打开编辑页面，不影响当前页面
+                window.open(`/modules/edit/${encodeURIComponent(filePath)}/`, '_blank');
             }
         }
     });
@@ -2124,16 +2124,6 @@ function bindModuleSelectionEvents() {
     document.querySelectorAll('.module-checkbox').forEach(checkbox => {
         checkbox.addEventListener('change', function() {
             updateSelectedModulesDisplay();
-        });
-    });
-    
-    // 重新绑定编辑按钮事件
-    document.querySelectorAll('.edit-module-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            const filePath = this.getAttribute('data-file-path');
-            if (filePath) {
-                window.open(`/modules/edit/${encodeURIComponent(filePath)}/`, '_blank');
-            }
         });
     });
 }
