@@ -726,6 +726,10 @@ def get_modules_by_category_api(request):
                 'label': cat_info['label'],
                 'count': cat_modules.count(),
                 'is_deletable': cat_info['is_deletable'],
+                'icon': cat_info['icon'],
+                'color': cat_info['color'],
+                'description': cat_info.get('description', ''),
+                'is_selectable': cat_info.get('is_selectable', True),
                 'modules': [
                     {
                         'id': module.id,

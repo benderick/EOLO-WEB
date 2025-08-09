@@ -319,6 +319,57 @@
     line-height: 1.2;
 }
 
+/* 已分类模块显示样式 */
+.classified-modules-list .category-group {
+    border-left: 3px solid #dee2e6;
+    padding-left: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.classified-modules-list .category-header {
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.classified-module-item {
+    background-color: #f8f9fa;
+    border: 1px solid #e9ecef !important;
+    border-radius: 0.375rem;
+    transition: all 0.2s ease;
+}
+
+.classified-module-item:hover {
+    background-color: #e9ecef;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.classified-module-item .module-name {
+    color: #495057;
+    font-weight: 600;
+    font-size: 0.8rem;
+}
+
+.classified-module-item .module-desc {
+    font-size: 0.75rem;
+    line-height: 1.3;
+    margin-top: 0.25rem;
+}
+
+/* 模块项卡片增强样式 */
+.module-item-card.border-success {
+    background-color: #f8fff9;
+    border-color: #28a745 !important;
+}
+
+.module-item-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: all 0.2s ease;
+}
+
 /* 模块分类弹窗优化样式 */
 #classifyModuleModal .modal-body {
     padding: 1rem 1.5rem;
@@ -1030,6 +1081,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // 存储编辑器实例到全局变量
         editorInstance = editor;
+        window.editorInstance = editor; // 也存储在全局对象中
         
         originalContent = editor.getValue();
     
@@ -1341,7 +1393,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 // 保存成功后自动退出编辑模式
                 exitEditMode();
                 // 不刷新页面，直接重新分析模块信息并更新侧边栏和类列表
-                refreshModuleInfoWithoutReload();
+                refreshModuleInfo(); // 这会重新加载页面，确保显示更新
             } else {
                 showSaveStatus('保存失败: ' + data.error, 'error');
             }
@@ -1483,12 +1535,62 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 更新模块信息侧边栏显示
     function updateModuleInfoSidebar(data) {
-        // 更新__all__字段模块显示
-        const moduleInfoCard = document.querySelector('.module-info-sidebar .card-body');
-        if (!moduleInfoCard) return;
+        // 重新获取完整的模块信息，包括已分类的模块
+        refreshCompleteModuleInfo();
+    }
+    
+    // 完整刷新模块信息侧边栏
+    function refreshCompleteModuleInfo() {
+        const filePath = '{{ file_path }}';
+        if (!filePath) {
+            console.log('没有文件路径，跳过模块信息刷新');
+            return;
+        }
+        
+        console.log('开始刷新模块信息，文件路径:', filePath);
+        
+        // 获取当前文件的所有模块信息
+        fetch('/modules/api/modules-by-category/', {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => {
+            console.log('API响应状态:', response.status);
+            return response.json();
+        })
+        .then(data => {
+            console.log('API返回数据:', data);
+            if (data.success) {
+                updateModuleInfoDisplay(data.modules_by_category, filePath);
+            } else {
+                console.error('API返回错误:', data.error);
+            }
+        })
+        .catch(error => {
+            console.error('获取模块信息失败:', error);
+        });
+    }
+    
+    // 更新模块信息显示
+    function updateModuleInfoDisplay(modulesByCategory, currentFilePath) {
+        console.log('开始更新模块信息显示');
+        console.log('当前文件路径:', currentFilePath);
+        console.log('分类数据:', modulesByCategory);
+        
+        const moduleInfoCard = document.querySelector('.module-info-sidebar:first-child .card-body');
+        if (!moduleInfoCard) {
+            console.error('找不到模块信息卡片');
+            return;
+        }
+        
+        console.log('找到模块信息卡片:', moduleInfoCard);
         
         // 从当前编辑器内容中提取__all__项目
-        const code = editorInstance ? editorInstance.getValue() : '';
+        const code = window.editor ? window.editor.getValue() : (window.editorInstance ? window.editorInstance.getValue() : '');
+        console.log('当前编辑器代码长度:', code.length);
+        
         const allPattern = /__all__\s*=\s*\[(.*?)\]/s;
         const allMatch = allPattern.exec(code);
         const allItems = [];
@@ -1501,66 +1603,54 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
         
+        console.log('提取到的__all__项目:', allItems);
+        
         // 更新模块信息头部的徽章
-        const badge = document.querySelector('.module-info-sidebar .card-header .badge');
+        const badge = document.querySelector('.module-info-sidebar:first-child .card-header .badge');
         if (badge) {
             badge.textContent = allItems.length;
+            console.log('更新了徽章数字:', allItems.length);
         }
         
-        // 重新构建模块信息显示
-        let newContent = '';
+        // 找到当前文件的已分类模块
+        let classifiedModules = [];
+        Object.keys(modulesByCategory).forEach(category => {
+            const categoryInfo = modulesByCategory[category];
+            if (categoryInfo.modules) {
+                categoryInfo.modules.forEach(module => {
+                    if (module.file_path === currentFilePath) {
+                        classifiedModules.push({
+                            ...module,
+                            category: category,
+                            category_info: categoryInfo
+                        });
+                    }
+                });
+            }
+        });
+        
+        console.log('找到的已分类模块:', classifiedModules);
+        
+        // 简化的内容构建
+        let newContent = `<div class="text-center text-muted py-3">
+            <i class="fas fa-sync-alt fa-spin fa-2x mb-2"></i>
+            <p class="mb-0 small">模块信息已更新</p>
+            <small>__all__ 模块: ${allItems.length} 个</small>
+            <br><small>已分类模块: ${classifiedModules.length} 个</small>
+        </div>`;
         
         if (allItems.length > 0) {
-            newContent += `
-                <div class="mb-3">
-                    <h6 class="text-muted mb-2">
-                        <i class="fas fa-list me-1"></i>__all__ 字段模块
-                    </h6>
-                    <div class="module-items-list">
-            `;
-            
+            newContent += '<div class="mt-3"><strong>__all__ 模块:</strong><br>';
             allItems.forEach(item => {
-                newContent += `
-                    <div class="module-item-card mb-2 p-2 border rounded">
-                        <div class="d-flex justify-content-between align-items-start">
-                            <div class="flex-grow-1">
-                                <div class="module-name text-primary fw-bold">${item}</div>
-                                <small class="text-muted">已导出模块</small>
-                            </div>
-                            <div class="module-actions">
-                                <button class="btn btn-sm btn-outline-primary add-module-btn" 
-                                        data-module-name="${item}" 
-                                        title="分类此模块">
-                                    <i class="fas fa-tag"></i>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                `;
+                const classified = classifiedModules.find(m => m.name === item);
+                newContent += `<span class="badge bg-${classified ? 'success' : 'secondary'} me-1 mb-1">${item}</span>`;
             });
-            
-            newContent += `
-                    </div>
-                </div>
-            `;
-        } else {
-            newContent += `
-                <div class="text-center text-muted py-3">
-                    <i class="fas fa-info-circle fa-2x mb-2"></i>
-                    <p class="mb-0 small">此文件没有 __all__ 字段</p>
-                    <small>无法检测到可导出的模块</small>
-                </div>
-            `;
-        }
-        
-        // 模块信息侧边栏内容保持不变
-        const existingClassifiedModules = moduleInfoCard.querySelector('.mt-3');
-        if (existingClassifiedModules) {
-            newContent += existingClassifiedModules.outerHTML;
+            newContent += '</div>';
         }
         
         // 更新内容
         moduleInfoCard.innerHTML = newContent;
+        console.log('模块信息显示更新完成');
     }
     
     cancelBtn.addEventListener('click', function() {
@@ -1891,8 +1981,10 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.success) {
                 showNotification(data.message, 'success');
                 classifyModal.hide();
-                // 刷新页面以显示更新后的分类
-                setTimeout(() => location.reload(), 1000);
+                // 刷新模块信息显示，不重新加载整个页面
+                setTimeout(() => {
+                    refreshModuleInfo(); // 使用带页面重载的方法确保更新
+                }, 500);
             } else {
                 showNotification('分类失败: ' + data.error, 'error');
             }
@@ -1944,13 +2036,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     }, 50); // 将初始化延迟从150ms减少到50ms，加快编辑器加载速度
     
-    // 页面加载完成后分析一次类定义并更新模块信息
+    // 页面加载完成后分析一次类定义
     setTimeout(() => {
         analyzeAndUpdateClasses();
-        // 同时初始化模块信息显示
-        if (typeof updateModuleInfoSidebar === 'function') {
-            updateModuleInfoSidebar({success: true});
-        }
     }, 1000);
 });
 
