@@ -12,7 +12,10 @@ wheels/
 # Django静态文件收集目录（生产环境用）
 staticfiles/
 
-tmp/
+tmp/experiment_pids/*
+tmp/experiment_logs/*
+!tmp/experiment_pids/.gitkeep
+!tmp/experiment_logs/.gitkeep
 
 # 其他临时文件
 *.log
