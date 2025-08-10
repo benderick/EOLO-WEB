@@ -44,38 +44,6 @@ class Dataset:
         return ('name' in self._data and 'file' in self._data and 
                 len(self._data) <= 3 and 'nc' not in self._data)
     
-    def _load_paths_config(self):
-        """
-        从EOLO/api/paths.json文件读取路径配置
-        
-        Returns:
-            dict: 路径配置字典，如果读取失败返回空字典
-        """
-        try:
-            # 获取EOLO项目根目录
-            eolo_root = settings.BASE_DIR / 'EOLO'
-            paths_file = settings.EOLO_PATHS_JSON
-
-            if paths_file.exists():
-                with open(paths_file, 'r', encoding='utf-8') as f:
-                    paths_config = json.load(f)
-                    return paths_config.get('paths', {})
-            else:
-                # 如果paths.json不存在，使用默认路径
-                return {
-                    'data_dir': str(eolo_root / 'data'),
-                    'root_dir': str(eolo_root),
-                    'work_dir': str(eolo_root)
-                }
-        except Exception as e:
-            # 读取失败时使用默认路径
-            eolo_root = settings.BASE_DIR / 'EOLO'
-            return {
-                'data_dir': str(eolo_root / 'data'),
-                'root_dir': str(eolo_root),
-                'work_dir': str(eolo_root)
-            }
-    
     def _resolve_path_variables(self, path_string):
         """
         解析路径字符串中的变量
@@ -90,7 +58,7 @@ class Dataset:
             return path_string
         
         # 获取路径配置
-        paths_config = self._load_paths_config()
+        paths_config = {"data_dir": str(settings.EOLO_DATA_DIR)}
         
         # 替换路径变量
         resolved_path = path_string

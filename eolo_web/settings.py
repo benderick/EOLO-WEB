@@ -197,6 +197,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # EOLO子项目路径（相对于EOLO-WEB根目录）
 EOLO_DIR = BASE_DIR / 'EOLO'
+EOLO_DATA_DIR = EOLO_DIR / 'data'
 
 # EOLO配置文件路径
 EOLO_CONFIGS_DIR = EOLO_DIR / 'configs'
@@ -208,9 +209,10 @@ EOLO_MODEL_TEMPLATE_DIR = EOLO_CONFIGS_DIR / 'template'
 # EOLO API 路径
 EOLO_API_DIR = EOLO_DIR / 'api'
 EOLO_MODEL_TEST_SCRIPT = EOLO_API_DIR / 'model_test.py'
-EOLO_PATHS_JSON = EOLO_API_DIR / 'paths.json'
 
-EOLO_ULTRALYTICS_WORKPIECES_DIR = Path('/icislab/volume3/benderick/futurama/EOLO-ultralytics/ultralytics/nn/workpieces')
+# EOLO-ULTRALYTICS项目路径（相对于EOLO-WEB根目录）
+EOLO_ULTRALYTICS_DIR = BASE_DIR / ".." / "EOLO-ultralytics"
+EOLO_ULTRALYTICS_WORKPIECES_DIR = EOLO_ULTRALYTICS_DIR / 'ultralytics/nn/workpieces'
 
 # 模型测试配置
 MODEL_TEST_CONFIG = {
